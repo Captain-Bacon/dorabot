@@ -77,9 +77,9 @@ export function getTaskPresentation(
       return { label: 'denied', dotClass: 'bg-destructive', action: null };
     }
     if (task.approvedAt) {
-      return { label: 'ready', dotClass: 'bg-muted-foreground/40', action: 'start' };
+      return { label: 'ready', dotClass: 'bg-emerald-500', action: 'start' };
     }
-    return { label: 'planned', dotClass: 'bg-muted-foreground/40', action: null };
+    return { label: 'planned', dotClass: 'bg-violet-500/40', action: null };
   }
 
   if (task.status === 'blocked') {
@@ -126,11 +126,11 @@ export function getStatusBadge(label: string): { bg: string; text: string } {
     case 'needs approval':
       return { bg: 'bg-amber-500/15', text: 'text-amber-500' };
     case 'ready':
-      return { bg: 'bg-amber-500/15', text: 'text-amber-500' };
+      return { bg: 'bg-emerald-500/15', text: 'text-emerald-500' };
     case 'planning':
       return { bg: 'bg-muted', text: 'text-muted-foreground' };
     case 'planned':
-      return { bg: 'bg-muted', text: 'text-muted-foreground' };
+      return { bg: 'bg-violet-500/15', text: 'text-violet-500' };
     case 'blocked':
       return { bg: 'bg-destructive/15', text: 'text-destructive' };
     case 'denied':

@@ -36,13 +36,13 @@ export function SummaryStrip({ tasks, taskRuns, activeFilter, onFilterChange }: 
   ).length;
 
   const items: StatItem[] = [];
-  if (running > 0) items.push({ count: running, label: 'running', filter: 'running', icon: <Activity className="h-3 w-3" />, className: 'text-foreground' });
-  if (approval > 0) items.push({ count: approval, label: 'pending', filter: 'pending', icon: <ShieldCheck className="h-3 w-3" />, className: 'text-primary' });
-  if (waiting > 0) items.push({ count: waiting, label: 'ready', filter: 'ready', icon: <Clock3 className="h-3 w-3" /> });
+  if (running > 0) items.push({ count: running, label: 'running', filter: 'running', icon: <Activity className="h-3 w-3" />, className: 'text-sky-500' });
+  if (approval > 0) items.push({ count: approval, label: 'approve', filter: 'pending', icon: <ShieldCheck className="h-3 w-3" />, className: 'text-amber-500' });
+  if (waiting > 0) items.push({ count: waiting, label: 'start', filter: 'ready', icon: <Clock3 className="h-3 w-3" />, className: 'text-emerald-500' });
+  if (denied > 0) items.push({ count: denied, label: 'revise', filter: 'denied', icon: <Ban className="h-3 w-3" />, className: 'text-destructive' });
   if (planning > 0) items.push({ count: planning, label: 'planning', filter: 'planning', icon: <Pencil className="h-3 w-3" /> });
   if (blocked > 0) items.push({ count: blocked, label: 'blocked', filter: 'blocked', icon: <CircleSlash className="h-3 w-3" />, className: 'text-destructive' });
-  if (denied > 0) items.push({ count: denied, label: 'denied', filter: 'denied', icon: <Ban className="h-3 w-3" />, className: 'text-destructive' });
-  items.push({ count: done, label: 'done', filter: 'done', icon: <CheckCircle2 className="h-3 w-3" /> });
+  if (done > 0) items.push({ count: done, label: 'done', filter: 'done', icon: <CheckCircle2 className="h-3 w-3" /> });
 
   if (tasks.length === 0) {
     return <div className="text-xs text-muted-foreground">no tasks yet</div>;

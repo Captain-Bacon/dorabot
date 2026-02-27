@@ -19,6 +19,7 @@ type Props = {
   tasks: Task[];
   presentations: Map<string, TaskPresentation>;
   defaultOpen?: boolean;
+  filtered?: boolean;
   onTaskClick: (task: Task) => void;
   onStartTask: (taskId: string, mode?: 'plan' | 'execute') => void;
   onWatchTask: (task: Task) => void;
@@ -31,7 +32,7 @@ type Props = {
 };
 
 export function GoalSection({
-  goal, tasks, presentations, defaultOpen = true,
+  goal, tasks, presentations, defaultOpen = true, filtered = false,
   onTaskClick, onStartTask, onWatchTask, onUnblockTask,
   onToggleGoalStatus, onCompleteGoal, onDeleteGoal, onCreateTask, busy,
 }: Props) {
@@ -42,8 +43,11 @@ export function GoalSection({
   const isDismissed = (t: Task) =>
     t.status === 'done' || t.status === 'cancelled' ||
     (t.status === 'planned' && !!t.reason && /denied/i.test(t.reason));
-  const activeTasks = tasks.filter(t => !isDismissed(t));
-  const dismissedTasks = tasks.filter(t => isDismissed(t));
+
+  // When a filter is active, show ALL matching tasks in one flat list (no active/dismissed split).
+  // The parent already filtered; re-splitting here hides results behind toggles.
+  const activeTasks = filtered ? tasks : tasks.filter(t => !isDismissed(t));
+  const dismissedTasks = filtered ? [] : tasks.filter(t => isDismissed(t));
   const [showDismissed, setShowDismissed] = useState(false);
 
   const handleAddTask = () => {
@@ -74,7 +78,11 @@ export function GoalSection({
                   <div className="mt-0.5 text-xs text-muted-foreground">{goal.description}</div>
                 )}
                 <div className="mt-1.5 flex items-center gap-3 text-[10px] text-muted-foreground">
-                  <span>{activeTasks.length} active{dismissedTasks.length > 0 ? ` · ${dismissedTasks.length} closed` : ''}</span>
+                  {filtered ? (
+                    <span>{tasks.length} matching</span>
+                  ) : (
+                    <span>{activeTasks.length} active{dismissedTasks.length > 0 ? ` · ${dismissedTasks.length} closed` : ''}</span>
+                  )}
                   {goal.status === 'paused' && (
                     <span className="text-amber-500">paused</span>
                   )}
