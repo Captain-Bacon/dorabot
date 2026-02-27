@@ -1,5 +1,6 @@
-# docs directory
-docs/
+# docs directory (but keep manual)
+docs/*
+!docs/USER-MANUAL.md
 
 # dependencies
 node_modules/
