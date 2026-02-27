@@ -36,6 +36,7 @@ type ChannelState = {
   stop: (() => Promise<void>) | null;
   sendApprovalRequest?: (req: any) => Promise<void>;
   sendQuestion?: (req: QuestionRequest) => Promise<void>;
+  resolveApproval?: (requestId: string, outcome: string) => Promise<void>;
 };
 
 export class ChannelManager {
@@ -154,6 +155,7 @@ export class ChannelManager {
     state.stop = result.stop;
     state.sendApprovalRequest = result.sendApprovalRequest;
     state.sendQuestion = result.sendQuestion;
+    state.resolveApproval = result.resolveApproval;
     this.emitStatus(state);
   }
 
@@ -187,6 +189,14 @@ export class ChannelManager {
   async stopAll(): Promise<void> {
     const promises = Array.from(this.channels.keys()).map(id => this.stopChannel(id));
     await Promise.allSettled(promises);
+  }
+
+  async resolveApproval(requestId: string, outcome: string): Promise<void> {
+    for (const ch of this.channels.values()) {
+      if (ch.connected && ch.resolveApproval) {
+        try { await ch.resolveApproval(requestId, outcome); } catch {}
+      }
+    }
   }
 
   async sendApprovalRequest(req: ApprovalRequest, targetChannel?: string): Promise<void> {

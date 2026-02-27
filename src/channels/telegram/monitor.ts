@@ -36,6 +36,7 @@ export type TelegramMonitorHandle = {
   stop: () => Promise<void>;
   sendApprovalRequest: (req: ApprovalRequest) => Promise<void>;
   sendQuestion: (req: QuestionRequest) => Promise<void>;
+  resolveApproval: (requestId: string, outcome: string) => Promise<void>;
 };
 
 export async function startTelegramMonitor(opts: TelegramMonitorOptions): Promise<TelegramMonitorHandle> {
@@ -141,6 +142,7 @@ export async function startTelegramMonitor(opts: TelegramMonitorOptions): Promis
     if (action !== 'approve' && action !== 'deny') return;
 
     const approved = action === 'approve';
+    approvalMessages.delete(requestId); // handled inline, no need for external cleanup
     opts.onApprovalResponse?.(requestId, approved, approved ? undefined : 'denied via telegram');
 
     try {
@@ -280,6 +282,9 @@ export async function startTelegramMonitor(opts: TelegramMonitorOptions): Promis
     throw err;
   }
 
+  // track approval message IDs so we can clean them up when resolved elsewhere
+  const approvalMessages = new Map<string, { chatId: number; messageId: number; text: string }>();
+
   // send approval request as inline keyboard to the owner
   const sendApprovalRequest = async (req: ApprovalRequest) => {
     const adminChatId = opts.allowFrom?.[0];
@@ -296,13 +301,24 @@ export async function startTelegramMonitor(opts: TelegramMonitorOptions): Promis
       .text('\u274c Deny', `deny:${req.requestId}`);
 
     try {
-      await bot.api.sendMessage(Number(adminChatId), text, {
+      const sent = await bot.api.sendMessage(Number(adminChatId), text, {
         parse_mode: 'HTML',
         reply_markup: keyboard,
       });
+      approvalMessages.set(req.requestId, { chatId: sent.chat.id, messageId: sent.message_id, text });
     } catch (err) {
       console.error('[telegram] failed to send approval request:', err);
     }
+  };
+
+  // clean up a Telegram approval message when resolved from another source (desktop, timeout)
+  const resolveApproval = async (requestId: string, outcome: string) => {
+    const tracked = approvalMessages.get(requestId);
+    if (!tracked) return;
+    approvalMessages.delete(requestId);
+    try {
+      await bot.api.editMessageText(tracked.chatId, tracked.messageId, `${tracked.text}\n\n${outcome}`, { parse_mode: 'HTML' });
+    } catch {}
   };
 
   const sendQuestion = async (req: QuestionRequest) => {
@@ -333,7 +349,7 @@ export async function startTelegramMonitor(opts: TelegramMonitorOptions): Promis
     }
   };
 
-  return { stop, sendApprovalRequest, sendQuestion };
+  return { stop, sendApprovalRequest, sendQuestion, resolveApproval };
 }
 
 function escapeHtml(s: string): string {

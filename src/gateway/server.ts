@@ -1443,6 +1443,7 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
       if (pending.timeout) clearTimeout(pending.timeout);
       pending.resolve({ approved, reason });
       broadcast({ event: 'agent.tool_approval_resolved', data: { requestId } });
+      channelManager.resolveApproval(requestId, approved ? '\u2705 Approved' : '\u274c Denied').catch(() => {});
     },
     onQuestionResponse: async (requestId, selectedIndex, label) => {
       console.log(`[canUseTool] question response: requestId=${requestId} index=${selectedIndex} label=${label}`);
@@ -1749,6 +1750,8 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
       const timer = timeoutMs ? setTimeout(() => {
         pendingApprovals.delete(requestId);
         if (sessionKey) { const snap = sessionSnapshots.get(sessionKey); if (snap) snap.pendingApproval = null; }
+        broadcast({ event: 'agent.tool_approval_resolved', data: { requestId } });
+        channelManager.resolveApproval(requestId, '\u23f0 Timed out').catch(() => {});
         resolve({ approved: false, reason: 'approval timeout' });
       }, timeoutMs) : null;
 
@@ -5015,6 +5018,7 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           if (pending.timeout) clearTimeout(pending.timeout);
           pending.resolve({ approved: true, modifiedInput: params?.modifiedInput as Record<string, unknown> });
           broadcast({ event: 'agent.tool_approval_resolved', data: { requestId } });
+          channelManager.resolveApproval(requestId, '\u2705 Approved').catch(() => {});
           return { id, result: { approved: true } };
         }
 
@@ -5026,6 +5030,7 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
             pendingTaskApprovals.delete(requestId);
             const reason = (params?.reason as string) || 'user denied';
             await handleTaskApprovalDecision(pendingTask.taskId, requestId, false, reason);
+            channelManager.resolveApproval(requestId, '\u274c Denied').catch(() => {});
             return { id, result: { denied: true, taskId: pendingTask.taskId } };
           }
           const pending = pendingApprovals.get(requestId);
@@ -5034,6 +5039,7 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           if (pending.timeout) clearTimeout(pending.timeout);
           pending.resolve({ approved: false, reason: (params?.reason as string) || 'user denied' });
           broadcast({ event: 'agent.tool_approval_resolved', data: { requestId } });
+          channelManager.resolveApproval(requestId, '\u274c Denied').catch(() => {});
           return { id, result: { denied: true } };
         }
 
