@@ -111,11 +111,23 @@ export function getBuiltInAgents(): Record<string, AgentDefinition> {
   return { ...builtInAgents };
 }
 
-export function getAllAgents(config: Config): Record<string, AgentDefinition> {
-  return {
+export function getAllAgents(config: Config, opts?: { includeDisabled?: boolean }): Record<string, AgentDefinition> {
+  const all: Record<string, AgentDefinition> = {
     ...builtInAgents,
     ...config.agents,
   };
+  if (opts?.includeDisabled) return all;
+  const disabled = config.disabledAgents || [];
+  if (disabled.length === 0) return all;
+  const result: Record<string, AgentDefinition> = {};
+  for (const [name, def] of Object.entries(all)) {
+    if (!disabled.includes(name)) result[name] = def;
+  }
+  return result;
+}
+
+export function isBuiltInAgent(name: string): boolean {
+  return name in builtInAgents;
 }
 
 export function getAgentByName(name: string, config: Config): AgentDefinition | null {

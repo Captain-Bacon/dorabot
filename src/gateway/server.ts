@@ -42,6 +42,7 @@ import {
   getTaskPlanPath,
 } from '../tools/tasks.js';
 import { loadResearch, saveResearch, readResearchContent, writeResearchFile, nextId as nextResearchId, type ResearchItem } from '../tools/research.js';
+import { getAllAgents, getBuiltInAgents, isBuiltInAgent } from '../agents/definitions.js';
 import { getProvider, getProviderByName, disposeAllProviders } from '../providers/index.js';
 import { isClaudeInstalled, hasOAuthTokens, getApiKey as getClaudeApiKey, getActiveAuthMethod, isOAuthTokenExpired, onClaudeAuthRequired } from '../providers/claude.js';
 import { isCodexInstalled, hasCodexAuth, onCodexAuthRequired } from '../providers/codex.js';
@@ -550,6 +551,8 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
 
   // queued messages for sessions with active runs
   const pendingMessages = new Map<string, InboundMessage[]>();
+  // sessions that should auto-clear after current run completes (from /handoff command)
+  const pendingHandoffClears = new Set<string>();
   // accumulated tool log per active run
   const toolLogs = new Map<string, { completed: ToolEntry[]; current: { name: string; inputJson: string; detail: string } | null; lastEditAt: number }>();
   // active RunHandles for message injection into running agent sessions
@@ -1375,6 +1378,43 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
         if (old) fileSessionManager.setMetadata(old.sessionId, { sdkSessionId: undefined });
         sessionRegistry.remove(key);
         return `session reset. ${old ? `old: ${old.messageCount} messages.` : ''} new session started.`;
+      }
+
+      if (cmd === 'clear' || cmd === 'reset') {
+        const session = sessionRegistry.get(key);
+        if (session?.activeRun) {
+          return '⚠️ Cannot clear while agent is running. Wait for the current response to finish.';
+        }
+        if (session) {
+          fileSessionManager.setMetadata(session.sessionId, { sdkSessionId: undefined });
+        }
+        sessionRegistry.remove(key);
+        return '✓ Conversation cleared. Starting fresh.';
+      }
+
+      if (cmd === 'handoff') {
+        const session = sessionRegistry.get(key);
+        if (session?.activeRun) {
+          return '⚠️ Cannot handoff while agent is running. Wait for the current response to finish.';
+        }
+        // Mark this session for auto-clear after the handoff run completes
+        pendingHandoffClears.add(key);
+        // Send a special prompt to the agent to write a handoff
+        const handoffMsg: InboundMessage = {
+          id: `handoff-${Date.now()}`,
+          channel,
+          accountId: chatId,
+          chatType,
+          chatId,
+          senderId: chatId,
+          body: '[System: User requested /handoff. Write a session_handoff document summarizing all work, decisions, and next steps from this conversation. Be thorough. After writing the handoff, confirm it was saved.]',
+          timestamp: Date.now(),
+        };
+        processChannelMessage(handoffMsg).catch((err) => {
+          console.error('[gateway] handoff prompt failed:', err);
+          pendingHandoffClears.delete(key);
+        });
+        return '📝 Writing handoff document... Context will auto-clear when done.';
       }
 
       if (cmd === 'status') {
@@ -2761,6 +2801,25 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
         if (taskRunBySession.has(sessionKey)) {
           finishTaskRun(sessionKey, 'error', 'run ended');
         }
+
+        // Auto-clear after handoff: if /handoff triggered this run, clear session now
+        if (pendingHandoffClears.has(sessionKey)) {
+          pendingHandoffClears.delete(sessionKey);
+          const session = sessionRegistry.get(sessionKey);
+          if (session) {
+            fileSessionManager.setMetadata(session.sessionId, { sdkSessionId: undefined });
+          }
+          sessionRegistry.remove(sessionKey);
+          // Notify messaging channels
+          const clearChannel = sessionKey.split(':')[0];
+          const clearChatId = sessionKey.split(':').slice(2).join(':');
+          const handler = getChannelHandler(clearChannel);
+          if (handler) {
+            try { await handler.send(clearChatId, '✓ Handoff complete. Context cleared. Next message starts a fresh session with the handoff loaded.'); } catch {}
+          }
+          // Broadcast event so desktop UI can clear too
+          broadcast({ event: 'session.cleared', data: { sessionKey, reason: 'handoff' } });
+        }
       }
     });
 
@@ -2923,6 +2982,11 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
               source: 'desktop/chat', sessionKey, prompt, injected: true, timestamp: Date.now(),
             }});
             return { id, result: { sessionKey, sessionId: session.sessionId, injected: true } };
+          }
+
+          // Mark for auto-clear after handoff if requested
+          if (params?.handoff) {
+            pendingHandoffClears.add(sessionKey);
           }
 
           // no active session — start new run
@@ -4396,6 +4460,124 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           } catch (err) {
             return { id, error: err instanceof Error ? err.message : String(err) };
           }
+        }
+
+        // ── Agent Registry RPCs ─────────────────────────────────
+        case 'agents.list': {
+          const all = getAllAgents(config, { includeDisabled: true });
+          const disabled = config.disabledAgents || [];
+          const agents = Object.entries(all).map(([name, def]) => ({
+            name,
+            description: def.description,
+            model: def.model || 'inherit',
+            tools: def.tools || [],
+            isBuiltIn: isBuiltInAgent(name),
+            enabled: !disabled.includes(name),
+          }));
+          return { id, result: agents };
+        }
+
+        case 'agents.get': {
+          const name = params?.name as string;
+          if (!name) return { id, error: 'name required' };
+          const all = getAllAgents(config, { includeDisabled: true });
+          const def = all[name];
+          if (!def) return { id, error: 'agent not found' };
+          const disabled = config.disabledAgents || [];
+          return { id, result: {
+            name,
+            description: def.description,
+            prompt: def.prompt,
+            model: def.model || 'inherit',
+            tools: def.tools || [],
+            isBuiltIn: isBuiltInAgent(name),
+            enabled: !disabled.includes(name),
+          }};
+        }
+
+        case 'agents.create': {
+          const name = (params?.name as string || '').trim();
+          if (!name) return { id, error: 'name required' };
+          if (!params?.prompt) return { id, error: 'prompt required' };
+          if (isBuiltInAgent(name)) return { id, error: 'cannot overwrite built-in agent' };
+          if (config.agents[name]) return { id, error: 'agent already exists' };
+          const def = {
+            description: (params.description as string) || '',
+            prompt: params.prompt as string,
+            model: (params.model as any) || undefined,
+            tools: (params.tools as string[]) || undefined,
+          };
+          config.agents[name] = def;
+          saveConfig(config);
+          return { id, result: { name, ...def, isBuiltIn: false, enabled: true } };
+        }
+
+        case 'agents.update': {
+          const name = params?.name as string;
+          if (!name) return { id, error: 'name required' };
+          if (isBuiltInAgent(name)) return { id, error: 'cannot edit built-in agent' };
+          if (!config.agents[name]) return { id, error: 'custom agent not found' };
+          const agent = config.agents[name];
+          if (params?.description !== undefined) agent.description = params.description as string;
+          if (params?.prompt !== undefined) agent.prompt = params.prompt as string;
+          if (params?.model !== undefined) agent.model = params.model as any;
+          if (params?.tools !== undefined) agent.tools = params.tools as string[];
+          config.agents[name] = agent;
+          saveConfig(config);
+          return { id, result: { name, ...agent, isBuiltIn: false, enabled: !(config.disabledAgents || []).includes(name) } };
+        }
+
+        case 'agents.delete': {
+          const name = params?.name as string;
+          if (!name) return { id, error: 'name required' };
+          if (isBuiltInAgent(name)) return { id, error: 'cannot delete built-in agent' };
+          if (!config.agents[name]) return { id, error: 'custom agent not found' };
+          delete config.agents[name];
+          // also remove from disabled list
+          if (config.disabledAgents) {
+            config.disabledAgents = config.disabledAgents.filter(n => n !== name);
+          }
+          saveConfig(config);
+          return { id, result: { deleted: true } };
+        }
+
+        case 'agents.toggle': {
+          const name = params?.name as string;
+          if (!name) return { id, error: 'name required' };
+          const all = getAllAgents(config, { includeDisabled: true });
+          if (!all[name]) return { id, error: 'agent not found' };
+          if (!config.disabledAgents) config.disabledAgents = [];
+          const idx = config.disabledAgents.indexOf(name);
+          const enabled = idx >= 0;
+          if (enabled) {
+            config.disabledAgents.splice(idx, 1);
+          } else {
+            config.disabledAgents.push(name);
+          }
+          saveConfig(config);
+          return { id, result: { name, enabled } };
+        }
+
+        case 'agents.duplicate': {
+          const name = params?.name as string;
+          if (!name) return { id, error: 'name required' };
+          const all = getAllAgents(config, { includeDisabled: true });
+          const source = all[name];
+          if (!source) return { id, error: 'source agent not found' };
+          let newName = (params?.newName as string || `${name}-copy`).trim();
+          if (all[newName]) {
+            let i = 2;
+            while (all[`${newName}-${i}`]) i++;
+            newName = `${newName}-${i}`;
+          }
+          config.agents[newName] = {
+            description: source.description,
+            prompt: source.prompt,
+            model: source.model,
+            tools: source.tools ? [...source.tools] : undefined,
+          };
+          saveConfig(config);
+          return { id, result: { name: newName, ...config.agents[newName], isBuiltIn: false, enabled: true } };
         }
 
         // ── config RPCs ──────────────────────────────────────────

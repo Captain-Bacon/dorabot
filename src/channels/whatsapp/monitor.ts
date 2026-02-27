@@ -179,7 +179,7 @@ export async function startWhatsAppMonitor(opts: WhatsAppMonitorOptions): Promis
           // check for commands (/new, /status)
           if (trimmed.startsWith('/') && opts.onCommand) {
             const cmd = trimmed.slice(1).split(/\s+/)[0].toLowerCase();
-            if (cmd === 'new' || cmd === 'status') {
+            if (cmd === 'new' || cmd === 'status' || cmd === 'clear' || cmd === 'reset' || cmd === 'handoff') {
               const reply = await opts.onCommand(cmd, remoteJid);
               if (reply && sock) {
                 try {

@@ -7,6 +7,7 @@ import { goalsTools } from './goals.js';
 import { tasksTools } from './tasks.js';
 import { researchTools } from './research.js';
 import { memoryTools } from './memory.js';
+import { handoffTool } from './handoff.js';
 
 export { messageTool, registerChannelHandler, getChannelHandler, type ChannelHandler } from './messaging.js';
 export { setScheduler, getScheduler } from './calendar.js';
@@ -34,6 +35,7 @@ const customTools = [
   messageTool,
   screenshotTool,
   browserTool,
+  handoffTool,
   ...calendarTools,
   ...goalsTools,
   ...tasksTools,

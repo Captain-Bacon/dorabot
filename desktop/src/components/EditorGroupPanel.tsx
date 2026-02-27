@@ -13,6 +13,7 @@ import { SoulView } from '../views/Soul';
 import { ExtensionsView } from '../views/Extensions';
 import { GoalsView } from '../views/Goals';
 import { ResearchView } from '../views/Research';
+import { InfrastructureView } from '../views/Infrastructure';
 import { FileViewer } from './FileViewer';
 import { ErrorBoundary } from './ErrorBoundary';
 import { cn } from '@/lib/utils';
@@ -149,6 +150,8 @@ export function EditorGroupPanel({
         );
       case 'settings':
         return <SettingsView gateway={gateway} />;
+      case 'infrastructure':
+        return <InfrastructureView gateway={gateway} />;
       default:
         return null;
     }

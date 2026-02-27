@@ -686,6 +686,37 @@ export function ChatView({ gateway, chatItems, agentStatus, pendingQuestion, ses
     const prompt = overridePrompt || input.trim();
     if ((!prompt && attachedImages.length === 0) || sending || pendingQuestion) return;
 
+    // Handle /clear, /reset, and /handoff commands
+    if (prompt === '/clear' || prompt === '/reset') {
+      if (!sessionKey) return;
+      if (!overridePrompt) setInput('');
+      setSending(true);
+      try {
+        const parts = sessionKey.split(':');
+        const channel = parts[0];
+        const chatId = parts.slice(2).join(':');
+        await gateway.resetSession(channel, chatId, sessionKey);
+        if (clearDraft) clearDraft(sessionKey);
+      } finally {
+        setSending(false);
+      }
+      return;
+    }
+    if (prompt === '/handoff') {
+      if (!sessionKey) return;
+      if (!overridePrompt) setInput('');
+      // Send handoff prompt via RPC with handoff flag; gateway will auto-clear after agent completes
+      const parts = sessionKey.split(':');
+      const chatId2 = parts.slice(2).join(':');
+      await gateway.rpc('chat.send', {
+        prompt: '[System: User requested /handoff. Write a session_handoff document summarizing all work, decisions, and next steps from this conversation. Be thorough. After writing the handoff, confirm it was saved.]',
+        chatId: chatId2,
+        sessionKey,
+        handoff: true,
+      });
+      return;
+    }
+
     const images = attachedImages.length > 0 ? [...attachedImages] : undefined;
     nextAutoScrollBehaviorRef.current = 'smooth';
     if (!overridePrompt) setInput('');

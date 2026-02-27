@@ -125,7 +125,9 @@ Workspace: ${WORKSPACE_DIR}
 **Daily journal** (${MEMORIES_DIR}/YYYY-MM-DD/MEMORY.md) — detailed log of what you did, learned, found. Today's file: ${todayDir}/MEMORY.md
 Timestamped entries. This is your continuity between runs. Promote important things up to MEMORY.md.${recentMemoriesSection}
 
-Write consistently. User shares facts or preferences → USER.md or MEMORY.md. Decisions, "remember this" → MEMORY.md. Task outcomes, observations, research → today's journal. Memory files are the only thing that survives between sessions.`);
+Write consistently. User shares facts or preferences → USER.md or MEMORY.md. Decisions, "remember this" → MEMORY.md. Task outcomes, observations, research → today's journal. Memory files are the only thing that survives between sessions.
+
+**Handoffs** (${WORKSPACE_DIR}/handoffs/) — context snapshots written before clearing a session. Use \`session_handoff\` tool to create them. When you pick up from a handoff, read it, integrate what matters into your journal and MEMORY.md, then delete the handoff file. Don't let them accumulate.`);
 
   // goals + tasks pipeline
   try {

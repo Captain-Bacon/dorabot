@@ -23,7 +23,7 @@ import {
   MessageSquare, Radio, Zap, Brain, Settings2,
   Sparkles, LayoutGrid, Loader2, Star,
   Sun, Moon, Clock, FileSearch, Plug, Folder, FolderOpen, X,
-  ShieldAlert, CalendarCheck, Target, FlaskConical, KeyRound
+  ShieldAlert, CalendarCheck, Target, FlaskConical, KeyRound, Blocks
 } from 'lucide-react';
 
 type SessionFilter = 'all' | 'desktop' | 'telegram' | 'whatsapp';
@@ -78,6 +78,7 @@ const SECONDARY_NAV_ITEMS: { id: TabType; label: string; icon: React.ReactNode }
   { id: 'automation', label: 'Automations', icon: <Zap className="w-3.5 h-3.5" /> },
   { id: 'extensions', label: 'Extensions', icon: <Sparkles className="w-3.5 h-3.5" /> },
   { id: 'memory', label: 'Memory', icon: <Brain className="w-3.5 h-3.5" /> },
+  { id: 'infrastructure', label: 'Infrastructure', icon: <Blocks className="w-3.5 h-3.5" /> },
 ];
 
 const ALL_NAV_ITEMS = [...PRIMARY_NAV_ITEMS, ...SECONDARY_NAV_ITEMS];

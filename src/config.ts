@@ -160,6 +160,7 @@ export type Config = {
     dirs: string[];
   };
   agents: Record<string, AgentDefinition>;
+  disabledAgents?: string[];
   sandbox: SandboxSettings;
   cron?: CronConfig;
   calendar?: CalendarConfig;

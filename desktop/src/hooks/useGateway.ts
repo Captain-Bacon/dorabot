@@ -1166,6 +1166,19 @@ export function useGateway() {
         break;
       }
 
+      case 'session.cleared': {
+        const d = data as { sessionKey: string; reason: string };
+        const sk = d.sessionKey;
+        if (sk && trackedSessionsRef.current.has(sk)) {
+          setSessionStates(prev => {
+            const state = prev[sk];
+            if (!state) return prev;
+            return { ...prev, [sk]: { ...DEFAULT_SESSION_STATE } };
+          });
+        }
+        break;
+      }
+
       case 'config.update': {
         const d = data as { key: string; value: unknown };
         setConfigData(prev => prev ? setNestedKey(prev, d.key, d.value) : prev);
@@ -1520,6 +1533,17 @@ export function useGateway() {
     }
   }, [rpc]);
 
+  const resetSession = useCallback(async (channel: string, chatId: string, sessionKey?: string) => {
+    await rpc('sessions.reset', { channel, chatId });
+    // Clear frontend chat state for this session
+    const sk = sessionKey || `${channel}:dm:${chatId}`;
+    setSessionStates(prev => {
+      const state = prev[sk];
+      if (!state) return prev;
+      return { ...prev, [sk]: { ...DEFAULT_SESSION_STATE } };
+    });
+  }, [rpc]);
+
   const abortAgent = useCallback(async (sessionKey?: string) => {
     const sk = sessionKey || activeSessionKeyRef.current;
     try {
@@ -1814,6 +1838,7 @@ export function useGateway() {
     rpc,
     sendMessage,
     abortAgent,
+    resetSession,
     newSession,
     loadSession,
     setCurrentSessionId: useCallback((id: string | undefined) => {
