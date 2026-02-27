@@ -71,13 +71,13 @@ export function getTaskPresentation(
 
   if (task.status === 'planned') {
     if (task.approvalRequestId) {
-      return { label: 'needs approval', dotClass: 'bg-amber-500', action: 'approve' };
+      return { label: 'waiting for approval', dotClass: 'bg-amber-500', action: 'approve' };
     }
     if (task.reason && /denied/i.test(task.reason)) {
-      return { label: 'denied', dotClass: 'bg-destructive', action: null };
+      return { label: 'needs revision', dotClass: 'bg-destructive', action: null };
     }
     if (task.approvedAt) {
-      return { label: 'ready', dotClass: 'bg-emerald-500', action: 'start' };
+      return { label: 'ready to start', dotClass: 'bg-emerald-500', action: 'start' };
     }
     return { label: 'planned', dotClass: 'bg-violet-500/40', action: null };
   }
@@ -123,8 +123,10 @@ export function getStatusBadge(label: string): { bg: string; text: string } {
   switch (label) {
     case 'running':
       return { bg: 'bg-sky-500/15', text: 'text-sky-500' };
+    case 'waiting for approval':
     case 'needs approval':
       return { bg: 'bg-amber-500/15', text: 'text-amber-500' };
+    case 'ready to start':
     case 'ready':
       return { bg: 'bg-emerald-500/15', text: 'text-emerald-500' };
     case 'planning':
@@ -133,6 +135,7 @@ export function getStatusBadge(label: string): { bg: string; text: string } {
       return { bg: 'bg-violet-500/15', text: 'text-violet-500' };
     case 'blocked':
       return { bg: 'bg-destructive/15', text: 'text-destructive' };
+    case 'needs revision':
     case 'denied':
       return { bg: 'bg-destructive/15', text: 'text-destructive' };
     case 'done':

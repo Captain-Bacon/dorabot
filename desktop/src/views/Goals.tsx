@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Loader2, Wrench, Target, Sparkles } from 'lucide-react';
 import type { Goal, Task, GoalStatus, TaskStatus } from './goals/helpers';
 import { getTaskPresentation, sortTasks, parseSessionKey, errorText } from './goals/helpers';
-import { ApprovalBanner } from './goals/ApprovalBanner';
+import { AttentionSection } from './goals/AttentionSection';
 import { SummaryStrip, type TaskFilter } from './goals/SummaryStrip';
 import { GoalSection } from './goals/GoalSection';
 import { GoalCreationTrigger, GoalCreationForm } from './goals/GoalCreation';
@@ -77,15 +77,26 @@ export function GoalsView({ gateway, onViewSession, onSetupChat }: Props) {
     }
   }, [taskFilter, taskRuns]);
 
-  const pendingApproval = useMemo(
-    () => tasks.filter(t => t.status === 'planned' && !!t.approvalRequestId),
-    [tasks],
-  );
-
-  const activeGoals = useMemo(
-    () => goals.filter(g => g.status !== 'done').sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
-    [goals],
-  );
+  const activeGoals = useMemo(() => {
+    const active = goals.filter(g => g.status !== 'done');
+    // Sort: goals with actionable tasks first (running, pending approval, ready), then by creation date
+    const goalActionScore = (g: Goal): number => {
+      const gTasks = tasks.filter(t => t.goalId === g.id);
+      let score = 0;
+      for (const t of gTasks) {
+        if (t.status === 'in_progress' || taskRuns[t.id]?.status === 'started') score += 100;
+        if (t.status === 'planned' && t.approvalRequestId) score += 50;
+        if (t.status === 'planned' && !t.approvalRequestId && t.approvedAt) score += 30;
+        if (t.status === 'blocked') score += 20;
+      }
+      return score;
+    };
+    return active.sort((a, b) => {
+      const scoreDiff = goalActionScore(b) - goalActionScore(a);
+      if (scoreDiff !== 0) return scoreDiff;
+      return a.createdAt.localeCompare(b.createdAt);
+    });
+  }, [goals, tasks, taskRuns]);
 
   const doneGoals = useMemo(
     () => goals.filter(g => g.status === 'done'),
@@ -278,12 +289,16 @@ export function GoalsView({ gateway, onViewSession, onSetupChat }: Props) {
     <>
       <ScrollArea className="h-full">
         <div className="mx-auto max-w-3xl space-y-6 p-6">
-          <ApprovalBanner
-            tasks={pendingApproval}
-            goalsById={goalsById}
+          <AttentionSection
+            tasks={tasks}
+            goals={goalsById}
+            taskRuns={taskRuns}
             onApprove={approveTask}
             onDeny={denyTask}
+            onStart={startTask}
+            onTaskClick={openTaskDetail}
             onViewPlan={openPlan}
+            onUnblock={unblockTask}
             busy={saving}
           />
 
