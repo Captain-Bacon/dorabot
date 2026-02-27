@@ -9,14 +9,15 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import { ChevronRight, MoreHorizontal, Plus, Pause, Play, Check, Trash2, Target } from 'lucide-react';
+import { ChevronRight, MoreHorizontal, Plus, Pause, Play, Check, Trash2 } from 'lucide-react';
 import { TaskRow } from './TaskRow';
 import type { Goal, Task, TaskPresentation } from './helpers';
-import { getGoalColor } from './helpers';
+import { getGoalColor, getStatusBadge } from './helpers';
 
 type Props = {
   goal: Goal;
   tasks: Task[];
+  allTasks: Task[];
   presentations: Map<string, TaskPresentation>;
   defaultOpen?: boolean;
   filtered?: boolean;
@@ -32,11 +33,16 @@ type Props = {
 };
 
 export function GoalSection({
-  goal, tasks, presentations, defaultOpen = true, filtered = false,
+  goal, tasks, allTasks, presentations, defaultOpen, filtered = false,
   onTaskClick, onStartTask, onWatchTask, onUnblockTask,
   onToggleGoalStatus, onCompleteGoal, onDeleteGoal, onCreateTask, busy,
 }: Props) {
-  const [open, setOpen] = useState(defaultOpen);
+  // Auto-expand if there are actionable tasks, otherwise collapse
+  const hasActionable = tasks.some(t => {
+    const p = presentations.get(t.id);
+    return p && p.action !== null;
+  });
+  const [open, setOpen] = useState(defaultOpen ?? hasActionable);
   const [showAdd, setShowAdd] = useState(false);
   const [newTitle, setNewTitle] = useState('');
 
@@ -44,11 +50,19 @@ export function GoalSection({
     t.status === 'done' || t.status === 'cancelled' ||
     (t.status === 'planned' && !!t.reason && /denied/i.test(t.reason));
 
-  // When a filter is active, show ALL matching tasks in one flat list (no active/dismissed split).
-  // The parent already filtered; re-splitting here hides results behind toggles.
   const activeTasks = filtered ? tasks : tasks.filter(t => !isDismissed(t));
   const dismissedTasks = filtered ? [] : tasks.filter(t => isDismissed(t));
   const [showDismissed, setShowDismissed] = useState(false);
+
+  // Compute inline status chips from ALL tasks for this goal (not filtered)
+  const statusChips = (() => {
+    const counts: Record<string, number> = {};
+    for (const t of allTasks) {
+      const p = presentations.get(t.id);
+      if (p) counts[p.label] = (counts[p.label] || 0) + 1;
+    }
+    return Object.entries(counts);
+  })();
 
   const handleAddTask = () => {
     const title = newTitle.trim();
@@ -58,146 +72,134 @@ export function GoalSection({
     setShowAdd(false);
   };
 
+  const color = getGoalColor(goal.id);
+
   return (
-    <div className={cn('rounded-lg border border-border border-l-2 bg-card', getGoalColor(goal.id).border)}>
-      <Collapsible open={open} onOpenChange={setOpen}>
-        <div className="group">
-          {/* goal header — visually distinct from tasks */}
-          <div className="flex items-start gap-3 px-4 py-3">
-            <CollapsibleTrigger className="flex flex-1 items-start gap-3 text-left">
-              <Target className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold">{goal.title}</span>
-                  <ChevronRight className={cn(
-                    'h-3 w-3 text-muted-foreground/50 transition-transform duration-200',
-                    open && 'rotate-90',
-                  )} />
-                </div>
-                {goal.description && (
-                  <div className="mt-0.5 text-xs text-muted-foreground">{goal.description}</div>
-                )}
-                <div className="mt-1.5 flex items-center gap-3 text-[10px] text-muted-foreground">
-                  {filtered ? (
-                    <span>{tasks.length} matching</span>
-                  ) : (
-                    <span>{activeTasks.length} active{dismissedTasks.length > 0 ? ` · ${dismissedTasks.length} closed` : ''}</span>
-                  )}
-                  {goal.status === 'paused' && (
-                    <span className="text-amber-500">paused</span>
-                  )}
-                </div>
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <div className="group">
+        <div className="flex items-center gap-2 py-1">
+          <CollapsibleTrigger className="flex flex-1 items-center gap-2 min-w-0 rounded px-2 py-1.5 hover:bg-muted/30 transition-colors">
+            <div className={cn('h-2 w-2 shrink-0 rounded-full', color.border.replace('border-l-', 'bg-'))} />
+            <ChevronRight className={cn(
+              'h-3 w-3 shrink-0 text-muted-foreground/40 transition-transform duration-150',
+              open && 'rotate-90',
+            )} />
+            <span className="text-xs font-medium truncate">{goal.title}</span>
+            {goal.status === 'paused' && (
+              <span className="text-[9px] text-amber-500 shrink-0">paused</span>
+            )}
+            {!open && statusChips.length > 0 && (
+              <div className="flex items-center gap-1.5 ml-auto shrink-0">
+                {statusChips.map(([label, count]) => {
+                  const badge = getStatusBadge(label);
+                  return (
+                    <span key={label} className={cn('inline-flex rounded px-1 py-0.5 text-[9px] leading-none', badge.bg, badge.text)}>
+                      {count} {label}
+                    </span>
+                  );
+                })}
               </div>
-            </CollapsibleTrigger>
+            )}
+          </CollapsibleTrigger>
 
-            <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 w-7 p-0"
-                onClick={() => setShowAdd(v => !v)}
-                title="Add work item"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </Button>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                    <MoreHorizontal className="h-3.5 w-3.5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => onToggleGoalStatus(goal)}>
-                    {goal.status === 'paused' ? (
-                      <><Play className="mr-2 h-3.5 w-3.5" /> Resume</>
-                    ) : (
-                      <><Pause className="mr-2 h-3.5 w-3.5" /> Pause</>
-                    )}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onCompleteGoal(goal)}>
-                    <Check className="mr-2 h-3.5 w-3.5" /> Mark done
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="text-destructive"
-                    onClick={() => onDeleteGoal(goal.id)}
-                  >
-                    <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+          <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0"
+              onClick={() => setShowAdd(v => !v)}
+              title="Add work item"
+            >
+              <Plus className="h-3 w-3" />
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                  <MoreHorizontal className="h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => onToggleGoalStatus(goal)}>
+                  {goal.status === 'paused' ? (
+                    <><Play className="mr-2 h-3.5 w-3.5" /> Resume</>
+                  ) : (
+                    <><Pause className="mr-2 h-3.5 w-3.5" /> Pause</>
+                  )}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onCompleteGoal(goal)}>
+                  <Check className="mr-2 h-3.5 w-3.5" /> Mark done
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="text-destructive"
+                  onClick={() => onDeleteGoal(goal.id)}
+                >
+                  <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
-
-          {showAdd && (
-            <div className="flex items-center gap-2 border-t border-border/50 px-4 py-2">
-              <Input
-                value={newTitle}
-                onChange={e => setNewTitle(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') handleAddTask(); if (e.key === 'Escape') setShowAdd(false); }}
-                placeholder="new work item"
-                className="h-8 text-xs"
-                autoFocus
-              />
-              <Button size="sm" className="h-8 text-xs" onClick={handleAddTask} disabled={!newTitle.trim()}>
-                Add
-              </Button>
-            </div>
-          )}
         </div>
 
-        <CollapsibleContent>
-          {(activeTasks.length > 0 || dismissedTasks.length > 0) && (
-            <div className="border-t border-border/50">
-              {activeTasks.length === 0 && dismissedTasks.length === 0 && (
-                <div className="px-4 py-4 text-xs text-muted-foreground">no work items</div>
-              )}
+        {showAdd && (
+          <div className="flex items-center gap-2 ml-9 mr-2 mb-1">
+            <Input
+              value={newTitle}
+              onChange={e => setNewTitle(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleAddTask(); if (e.key === 'Escape') setShowAdd(false); }}
+              placeholder="new work item"
+              className="h-7 text-xs"
+              autoFocus
+            />
+            <Button size="sm" className="h-7 text-xs" onClick={handleAddTask} disabled={!newTitle.trim()}>
+              Add
+            </Button>
+          </div>
+        )}
+      </div>
 
-              {activeTasks.map(task => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  presentation={presentations.get(task.id) || { label: '', dotClass: '', action: null }}
-                  onClick={() => onTaskClick(task)}
-                  onStart={(mode) => onStartTask(task.id, mode)}
-                  onWatch={() => onWatchTask(task)}
-                  onUnblock={() => onUnblockTask(task.id)}
-                  busy={!!busy && busy.startsWith(`task:${task.id}:`)}
-                />
-              ))}
+      <CollapsibleContent>
+        <div className="ml-4 border-l-2 border-border/40 pl-3 mb-1">
+          {activeTasks.map(task => (
+            <TaskRow
+              key={task.id}
+              task={task}
+              presentation={presentations.get(task.id) || { label: '', dotClass: '', action: null }}
+              onClick={() => onTaskClick(task)}
+              onStart={(mode) => onStartTask(task.id, mode)}
+              onWatch={() => onWatchTask(task)}
+              onUnblock={() => onUnblockTask(task.id)}
+              busy={!!busy && busy.startsWith(`task:${task.id}:`)}
+            />
+          ))}
 
-              {dismissedTasks.length > 0 && (
-                <button
-                  type="button"
-                  className="w-full px-4 py-2 text-left text-[10px] text-muted-foreground transition-colors hover:bg-muted/20"
-                  onClick={() => setShowDismissed(v => !v)}
-                >
-                  {showDismissed ? 'hide' : 'show'} {dismissedTasks.length} closed
-                </button>
-              )}
-
-              {showDismissed && dismissedTasks.map(task => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  presentation={presentations.get(task.id) || { label: 'done', dotClass: 'bg-muted-foreground/20', action: null }}
-                  onClick={() => onTaskClick(task)}
-                  onStart={(mode) => onStartTask(task.id, mode)}
-                  onWatch={() => onWatchTask(task)}
-                  onUnblock={() => onUnblockTask(task.id)}
-                  busy={!!busy && busy.startsWith(`task:${task.id}:`)}
-                />
-              ))}
-            </div>
+          {dismissedTasks.length > 0 && (
+            <button
+              type="button"
+              className="w-full px-3 py-1 text-left text-[10px] text-muted-foreground/60 transition-colors hover:text-muted-foreground"
+              onClick={() => setShowDismissed(v => !v)}
+            >
+              {showDismissed ? 'hide' : 'show'} {dismissedTasks.length} closed
+            </button>
           )}
+
+          {showDismissed && dismissedTasks.map(task => (
+            <TaskRow
+              key={task.id}
+              task={task}
+              presentation={presentations.get(task.id) || { label: 'done', dotClass: 'bg-muted-foreground/20', action: null }}
+              onClick={() => onTaskClick(task)}
+              onStart={(mode) => onStartTask(task.id, mode)}
+              onWatch={() => onWatchTask(task)}
+              onUnblock={() => onUnblockTask(task.id)}
+              busy={!!busy && busy.startsWith(`task:${task.id}:`)}
+            />
+          ))}
 
           {activeTasks.length === 0 && dismissedTasks.length === 0 && (
-            <div className="border-t border-border/50 px-4 py-4 text-xs text-muted-foreground">
-              no work items yet
-            </div>
+            <div className="px-3 py-2 text-[10px] text-muted-foreground/50">no work items yet</div>
           )}
-        </CollapsibleContent>
-      </Collapsible>
-    </div>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

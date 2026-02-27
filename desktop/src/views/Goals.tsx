@@ -335,28 +335,32 @@ export function GoalsView({ gateway, onViewSession, onSetupChat }: Props) {
             </div>
           )}
 
-          {activeGoals.map(goal => {
-            const goalTasks = tasksByGoal.get(goal.id) || [];
-            if (taskFilter && goalTasks.length === 0) return null;
-            return (
-              <GoalSection
-                key={goal.id}
-                goal={goal}
-                tasks={goalTasks}
-                presentations={presentations}
-                filtered={!!taskFilter}
-                onTaskClick={openTaskDetail}
-                onStartTask={startTask}
-                onWatchTask={watchTask}
-                onUnblockTask={unblockTask}
-                onToggleGoalStatus={toggleGoalStatus}
-                onCompleteGoal={completeGoal}
-                onDeleteGoal={deleteGoal}
-                onCreateTask={createTask}
-                busy={saving}
-              />
-            );
-          })}
+          <div className="space-y-0.5">
+            {activeGoals.map(goal => {
+              const goalTasks = tasksByGoal.get(goal.id) || [];
+              const allGoalTasks = tasks.filter(t => t.goalId === goal.id);
+              if (taskFilter && goalTasks.length === 0) return null;
+              return (
+                <GoalSection
+                  key={goal.id}
+                  goal={goal}
+                  tasks={goalTasks}
+                  allTasks={allGoalTasks}
+                  presentations={presentations}
+                  filtered={!!taskFilter}
+                  onTaskClick={openTaskDetail}
+                  onStartTask={startTask}
+                  onWatchTask={watchTask}
+                  onUnblockTask={unblockTask}
+                  onToggleGoalStatus={toggleGoalStatus}
+                  onCompleteGoal={completeGoal}
+                  onDeleteGoal={deleteGoal}
+                  onCreateTask={createTask}
+                  busy={saving}
+                />
+              );
+            })}
+          </div>
 
           {orphanTasks.length > 0 && (
             <div className="rounded-lg border border-dashed border-border/60 bg-card">
@@ -384,18 +388,20 @@ export function GoalsView({ gateway, onViewSession, onSetupChat }: Props) {
           {doneGoals.length > 0 && (!taskFilter || doneGoals.some(g => (tasksByGoal.get(g.id) || []).length > 0)) && (
             <>
               <Separator />
-              <div className="space-y-2">
-                <div className="px-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+              <div className="space-y-0.5">
+                <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground">
                   completed goals
                 </div>
                 {doneGoals.map(goal => {
                   const goalTasks = tasksByGoal.get(goal.id) || [];
+                  const allGoalTasks = tasks.filter(t => t.goalId === goal.id);
                   if (taskFilter && goalTasks.length === 0) return null;
                   return (
                     <GoalSection
                       key={goal.id}
                       goal={goal}
                       tasks={goalTasks}
+                      allTasks={allGoalTasks}
                       presentations={presentations}
                       defaultOpen={false}
                       filtered={!!taskFilter}
