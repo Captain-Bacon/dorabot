@@ -1442,6 +1442,7 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
       pendingApprovals.delete(requestId);
       if (pending.timeout) clearTimeout(pending.timeout);
       pending.resolve({ approved, reason });
+      broadcast({ event: 'agent.tool_approval_resolved', data: { requestId } });
     },
     onQuestionResponse: async (requestId, selectedIndex, label) => {
       console.log(`[canUseTool] question response: requestId=${requestId} index=${selectedIndex} label=${label}`);
@@ -2090,7 +2091,10 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
     }
 
     // classify tool call (use clean name so FORM_MAP in desktop matches)
-    const tier = classifyToolCall(cleanName, input);
+    // For message tool, check the target channel's policy (not the run channel)
+    const policyChannel = cleanName === 'message' ? (input.channel as string) || runChannel : runChannel;
+    const policyForClassify = getChannelToolPolicy(policyChannel);
+    const tier = classifyToolCall(cleanName, input, policyForClassify);
 
     // respect permissionMode and approvalMode
     const approvalMode = config.security?.approvalMode || 'approve-sensitive';
@@ -5003,6 +5007,7 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           pendingApprovals.delete(requestId);
           if (pending.timeout) clearTimeout(pending.timeout);
           pending.resolve({ approved: true, modifiedInput: params?.modifiedInput as Record<string, unknown> });
+          broadcast({ event: 'agent.tool_approval_resolved', data: { requestId } });
           return { id, result: { approved: true } };
         }
 
@@ -5021,6 +5026,7 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           pendingApprovals.delete(requestId);
           if (pending.timeout) clearTimeout(pending.timeout);
           pending.resolve({ approved: false, reason: (params?.reason as string) || 'user denied' });
+          broadcast({ event: 'agent.tool_approval_resolved', data: { requestId } });
           return { id, result: { denied: true } };
         }
 
