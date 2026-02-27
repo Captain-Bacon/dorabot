@@ -2918,9 +2918,16 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           for (const sk of keys) {
             const snap = sessionSnapshots.get(sk);
             if (snap && clientWs) {
-              const snapshotData = (snap.pendingQuestionStatus && snap.pendingQuestionStatus !== 'pending')
-                ? { ...snap, pendingQuestion: null }
-                : snap;
+              let snapshotData = snap;
+              // Clear stale pending questions that are no longer actually pending
+              if (snap.pendingQuestionStatus && snap.pendingQuestionStatus !== 'pending') {
+                snapshotData = { ...snapshotData, pendingQuestion: null };
+              }
+              // Clear stale pending approvals that no longer exist in the approval map
+              if (snap.pendingApproval && !pendingApprovals.has(snap.pendingApproval.requestId)) {
+                snapshotData = { ...snapshotData, pendingApproval: null };
+                snap.pendingApproval = null; // also fix the source snapshot
+              }
               clientWs.send(JSON.stringify({ event: 'session.snapshot', data: snapshotData }));
             }
           }
