@@ -4,12 +4,16 @@ import { readdirSync, statSync, readFileSync, writeFileSync, existsSync, mkdirSy
 import { writeFile } from 'node:fs/promises';
 import { execSync } from 'node:child_process';
 import { resolve as pathResolve, join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { createConnection } from 'node:net';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 const resolve = (p: string) => pathResolve(p.startsWith('~') ? p.replace('~', homedir()) : p);
 import type { Config } from '../config.js';
 import { isPathAllowed, saveConfig, ALWAYS_DENIED, type SecurityConfig, type ToolPolicyConfig } from '../config.js';
+import { getDb } from '../db.js';
 import type { WsMessage, WsResponse, WsEvent, GatewayContext } from './types.js';
 import { SessionRegistry } from './session-registry.js';
 import { ChannelManager } from './channel-manager.js';
@@ -3208,6 +3212,102 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           return { id, result: { sessionId, messages } };
         }
 
+        case 'sessions.search': {
+          const query = params?.query as string;
+          if (!query || query.trim().length === 0) {
+            return { id, result: { results: [], total: 0 } };
+          }
+
+          const channel = params?.channel as string | undefined;
+          const after = params?.after as string | undefined;
+          const before = params?.before as string | undefined;
+          const limit = Math.min((params?.limit as number) || 30, 100);
+          const offset = (params?.offset as number) || 0;
+
+          try {
+            const db = getDb();
+
+            // Build WHERE clause
+            let whereExtra = '';
+            const sqlParams: unknown[] = [query];
+
+            if (channel) {
+              whereExtra += ' AND s.channel = ?';
+              sqlParams.push(channel);
+            }
+            if (after) {
+              whereExtra += ' AND m.timestamp >= ?';
+              sqlParams.push(after);
+            }
+            if (before) {
+              whereExtra += ' AND m.timestamp <= ?';
+              sqlParams.push(before);
+            }
+
+            // Count query
+            const countSql = `
+              SELECT COUNT(*) as total
+              FROM messages_fts f
+              JOIN messages m ON m.id = f.rowid
+              LEFT JOIN sessions s ON s.id = m.session_id
+              WHERE messages_fts MATCH ?${whereExtra}
+            `;
+            const countRow = db.prepare(countSql).get(...sqlParams) as { total: number };
+
+            // Results query
+            const resultSql = `
+              SELECT
+                m.id AS message_id,
+                m.session_id,
+                m.type,
+                m.timestamp,
+                m.content,
+                s.channel,
+                s.chat_id,
+                s.chat_type,
+                s.sender_name,
+                s.message_count,
+                s.created_at,
+                s.updated_at,
+                snippet(messages_fts, 0, '<<', '>>', '...', 40) AS snippet,
+                f.rank
+              FROM messages_fts f
+              JOIN messages m ON m.id = f.rowid
+              LEFT JOIN sessions s ON s.id = m.session_id
+              WHERE messages_fts MATCH ?${whereExtra}
+              ORDER BY f.rank
+              LIMIT ? OFFSET ?
+            `;
+
+            const rows = db.prepare(resultSql).all(...sqlParams, limit, offset) as any[];
+
+            const results = rows.map(row => ({
+              messageId: row.message_id,
+              sessionId: row.session_id,
+              messageType: row.type,
+              timestamp: row.timestamp,
+              snippet: row.snippet,
+              channel: row.channel || undefined,
+              chatId: row.chat_id || undefined,
+              senderName: row.sender_name || undefined,
+              messageCount: row.message_count,
+              sessionCreatedAt: row.created_at,
+              sessionUpdatedAt: row.updated_at,
+            }));
+
+            return { id, result: { results, total: countRow.total } };
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            if (msg.includes('fts5: syntax error')) {
+              return {
+                id,
+                error: 'Invalid search syntax. Try simpler keywords or quote exact phrases.',
+              };
+            }
+            return { id, error: `Search failed: ${msg}` };
+          }
+        }
+
         case 'sessions.delete': {
           const sessionId = params?.sessionId as string;
           if (!sessionId) return { id, error: 'sessionId required' };
@@ -4592,6 +4692,49 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           };
           saveConfig(config);
           return { id, result: { name: newName, ...config.agents[newName], isBuiltIn: false, enabled: true } };
+        }
+
+        // ── dev RPCs ──────────────────────────────────────────────
+        case 'dev.rebuild': {
+          // Check if any agents are running
+          const hasActiveRuns = sessionRegistry.getActiveRunKeys().length > 0;
+          if (hasActiveRuns) {
+            return { id, error: 'Cannot rebuild while agents are running' };
+          }
+
+          try {
+            const { spawn } = await import('node:child_process');
+            const projectRoot = pathResolve(__dirname, '../..');
+
+            // Build gateway (tsc)
+            broadcast({ event: 'dev.rebuild.progress' as any, data: { stage: 'gateway', status: 'building' } });
+            const gatewayBuild = spawn('npm', ['run', 'build'], { cwd: projectRoot, shell: true });
+            let gatewayOutput = '';
+            gatewayBuild.stdout?.on('data', (chunk) => { gatewayOutput += chunk.toString(); });
+            gatewayBuild.stderr?.on('data', (chunk) => { gatewayOutput += chunk.toString(); });
+
+            await new Promise<void>((resolve, reject) => {
+              gatewayBuild.on('close', (code) => {
+                if (code === 0) resolve();
+                else reject(new Error(`Gateway build failed with code ${code}\n${gatewayOutput}`));
+              });
+            });
+
+            // Gateway built. Tell frontend to reload, then restart this process.
+            broadcast({ event: 'dev.rebuild.progress' as any, data: { stage: 'complete', status: 'success' } });
+
+            // Give the frontend a moment to show the success toast, then exit.
+            // The launcher (electron-vite dev / Project Launcher) will respawn us.
+            setTimeout(() => {
+              process.exit(0);
+            }, 1500);
+
+            return { id, result: { success: true } };
+          } catch (err) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            broadcast({ event: 'dev.rebuild.progress' as any, data: { stage: 'error', status: 'failed', error: errMsg } });
+            return { id, error: errMsg };
+          }
         }
 
         // ── config RPCs ──────────────────────────────────────────

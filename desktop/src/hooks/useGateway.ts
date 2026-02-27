@@ -92,12 +92,12 @@ function applyStreamEvent(items: ChatItem[], evt: Record<string, unknown>): Chat
 export type ImageAttachment = { data: string; mediaType: string };
 
 export type ChatItem =
-  | { type: 'user'; content: string; images?: ImageAttachment[]; timestamp: number }
-  | { type: 'text'; content: string; streaming?: boolean; timestamp: number }
-  | { type: 'tool_use'; id: string; name: string; input: string; output?: string; imageData?: string; is_error?: boolean; streaming?: boolean; subItems?: ChatItem[]; timestamp: number }
-  | { type: 'thinking'; content: string; streaming?: boolean; timestamp: number }
-  | { type: 'result'; cost?: number; timestamp: number }
-  | { type: 'error'; content: string; timestamp: number };
+  | { type: 'user'; content: string; images?: ImageAttachment[]; timestamp: number; messageId?: number }
+  | { type: 'text'; content: string; streaming?: boolean; timestamp: number; messageId?: number }
+  | { type: 'tool_use'; id: string; name: string; input: string; output?: string; imageData?: string; is_error?: boolean; streaming?: boolean; subItems?: ChatItem[]; timestamp: number; messageId?: number }
+  | { type: 'thinking'; content: string; streaming?: boolean; timestamp: number; messageId?: number }
+  | { type: 'result'; cost?: number; timestamp: number; messageId?: number }
+  | { type: 'error'; content: string; timestamp: number; messageId?: number };
 
 export type ProgressItem = { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm: string };
 
@@ -118,6 +118,28 @@ export type ChannelStatusInfo = {
   running: boolean;
   connected: boolean;
   lastError: string | null;
+};
+
+export type SearchResult = {
+  messageId: number;
+  sessionId: string;
+  messageType: string;
+  timestamp: string;
+  snippet: string;
+  channel?: string;
+  chatId?: string;
+  senderName?: string;
+  messageCount: number;
+  sessionCreatedAt: string;
+  sessionUpdatedAt: string;
+};
+
+export type SearchState = {
+  results: SearchResult[];
+  total: number;
+  query: string;
+  loading: boolean;
+  error?: string;
 };
 
 export type SessionInfo = {
@@ -253,6 +275,7 @@ type SessionMessage = {
   uuid?: string;
   timestamp: string;
   content: Record<string, unknown>;
+  id?: number;
 };
 
 function sessionMessagesToChatItems(messages: SessionMessage[]): ChatItem[] {
@@ -354,7 +377,7 @@ function sessionMessagesToChatItems(messages: SessionMessage[]): ChatItem[] {
           }
         }
         if (text || images?.length) {
-          items.push({ type: 'user', content: text, images, timestamp: ts });
+          items.push({ type: 'user', content: text, images, timestamp: ts, messageId: msg.id });
         }
       }
       continue;
@@ -390,7 +413,7 @@ function sessionMessagesToChatItems(messages: SessionMessage[]): ChatItem[] {
       if (Array.isArray(blocks)) {
         for (const block of blocks) {
           if (block.type === 'text' && block.text) {
-            items.push({ type: 'text', content: block.text, timestamp: ts });
+            items.push({ type: 'text', content: block.text, timestamp: ts, messageId: msg.id });
           } else if (block.type === 'tool_use') {
             const name = cleanToolName(block.name || 'unknown');
             const item: ChatItem = {
@@ -399,6 +422,7 @@ function sessionMessagesToChatItems(messages: SessionMessage[]): ChatItem[] {
               name,
               input: typeof block.input === 'string' ? block.input : JSON.stringify(block.input || {}),
               timestamp: ts,
+              messageId: msg.id,
             };
             items.push(item);
 
@@ -408,7 +432,7 @@ function sessionMessagesToChatItems(messages: SessionMessage[]): ChatItem[] {
               taskSubItems.set(block.id, []);
             }
           } else if (block.type === 'thinking' && block.thinking) {
-            items.push({ type: 'thinking', content: block.thinking, timestamp: ts });
+            items.push({ type: 'thinking', content: block.thinking, timestamp: ts, messageId: msg.id });
           }
         }
       }
@@ -420,6 +444,7 @@ function sessionMessagesToChatItems(messages: SessionMessage[]): ChatItem[] {
         type: 'result',
         cost: (c as any).total_cost_usd,
         timestamp: ts,
+        messageId: msg.id,
       });
     }
   }
@@ -454,6 +479,12 @@ export function useGateway() {
   const [model, setModel] = useState<string>('');
   const [configData, setConfigData] = useState<Record<string, unknown> | null>(null);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [searchState, setSearchState] = useState<SearchState>({
+    results: [],
+    total: 0,
+    query: '',
+    loading: false,
+  });
   const [pendingApprovals, setPendingApprovals] = useState<ToolApproval[]>([]);
   const [notifications, setNotifications] = useState<ToolNotification[]>([]);
   const [whatsappQr, setWhatsappQr] = useState<string | null>(null);
@@ -1550,6 +1581,46 @@ export function useGateway() {
     });
   }, [rpc]);
 
+  const searchSessions = useCallback(async (
+    query: string,
+    opts?: { channel?: string; after?: string; before?: string; offset?: number }
+  ) => {
+    if (!query.trim()) {
+      setSearchState({ results: [], total: 0, query: '', loading: false });
+      return;
+    }
+
+    setSearchState(prev => ({ ...prev, query, loading: true, error: undefined }));
+
+    try {
+      const res = await rpc('sessions.search', {
+        query,
+        channel: opts?.channel,
+        after: opts?.after,
+        before: opts?.before,
+        limit: 30,
+        offset: opts?.offset || 0,
+      }) as { results: SearchResult[]; total: number };
+
+      setSearchState({
+        results: res.results,
+        total: res.total,
+        query,
+        loading: false,
+      });
+    } catch (err) {
+      setSearchState(prev => ({
+        ...prev,
+        loading: false,
+        error: err instanceof Error ? err.message : 'Search failed',
+      }));
+    }
+  }, [rpc]);
+
+  const clearSearch = useCallback(() => {
+    setSearchState({ results: [], total: 0, query: '', loading: false });
+  }, []);
+
   const abortAgent = useCallback(async (sessionKey?: string) => {
     const sk = sessionKey || activeSessionKeyRef.current;
     try {
@@ -1847,6 +1918,9 @@ export function useGateway() {
     resetSession,
     newSession,
     loadSession,
+    searchState,
+    searchSessions,
+    clearSearch,
     setCurrentSessionId: useCallback((id: string | undefined) => {
       const sk = activeSessionKeyRef.current;
       setSessionStates(prev => {

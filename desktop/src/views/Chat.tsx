@@ -749,7 +749,7 @@ export function ChatView({ gateway, chatItems, agentStatus, pendingQuestion, ses
     switch (item.type) {
       case 'user':
         return (
-          <div key={i} className="flex gap-2 px-2 py-1.5 my-1 bg-secondary rounded-md min-w-0">
+          <div key={i} data-message-id={item.messageId} className="flex gap-2 px-2 py-1.5 my-1 bg-secondary rounded-md min-w-0">
             <span className="text-primary font-semibold shrink-0">{'>'}</span>
             <div className="min-w-0">
               {item.images?.length ? (
@@ -770,7 +770,7 @@ export function ChatView({ gateway, chatItems, agentStatus, pendingQuestion, ses
         );
       case 'text':
         return (
-          <div key={i} className="prose-chat py-1.5">
+          <div key={i} data-message-id={item.messageId} className="prose-chat py-1.5">
             <InlineErrorBoundary>
               <Markdown remarkPlugins={[remarkGfm]}>{item.content}</Markdown>
             </InlineErrorBoundary>
@@ -782,26 +782,26 @@ export function ChatView({ gateway, chatItems, agentStatus, pendingQuestion, ses
           const todos = safeParse(item.input).todos || [];
           const done = todos.filter((t: any) => t.status === 'completed').length;
           return (
-            <div key={i} className="flex items-center gap-2 text-[10px] text-muted-foreground py-0.5">
+            <div key={i} data-message-id={item.messageId} className="flex items-center gap-2 text-[10px] text-muted-foreground py-0.5">
               <ListChecks className="w-3 h-3" />
               <span>tasks {done}/{todos.length}</span>
             </div>
           );
         }
         if (item.name === 'AskUserQuestion' && !item.output) return <div key={i} style={{ height: 0, overflow: 'hidden' }} />;
-        return <div key={i} className="my-1.5"><InlineErrorBoundary><ToolUseItem item={item} /></InlineErrorBoundary></div>;
+        return <div key={i} data-message-id={item.messageId} className="my-1.5"><InlineErrorBoundary><ToolUseItem item={item} /></InlineErrorBoundary></div>;
       case 'thinking':
         return <ThinkingItem key={i} item={item} />;
       case 'result':
         return (
-          <div key={i} className="flex gap-2 text-[10px] text-muted-foreground py-1 mt-1 border-t border-border">
+          <div key={i} data-message-id={item.messageId} className="flex gap-2 text-[10px] text-muted-foreground py-1 mt-1 border-t border-border">
             {item.cost != null && <span>${item.cost.toFixed(4)}</span>}
             <span>{formatTime(item.timestamp)}</span>
           </div>
         );
       case 'error':
         return (
-          <div key={i} className="text-destructive py-1 break-words min-w-0">
+          <div key={i} data-message-id={item.messageId} className="text-destructive py-1 break-words min-w-0">
             {item.content}
           </div>
         );

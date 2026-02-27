@@ -414,3 +414,13 @@
   border-left: 3px solid #ef4444 !important;
 }
 
+/* search highlight animation */
+.search-highlight {
+  animation: search-flash 3s ease-out;
+}
+
+@keyframes search-flash {
+  0%, 15% { background-color: rgba(234, 179, 8, 0.2); }
+  100% { background-color: transparent; }
+}
+

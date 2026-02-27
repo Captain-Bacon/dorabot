@@ -42,6 +42,7 @@ export type SessionMessage = {
   timestamp: string;
   content: unknown;
   metadata?: MessageMetadata;
+  id?: number;
 };
 
 export class SessionManager {
@@ -116,7 +117,8 @@ export class SessionManager {
 
   load(sessionId: string): SessionMessage[] {
     const db = getDb();
-    const rows = db.prepare('SELECT type, uuid, timestamp, content, metadata FROM messages WHERE session_id = ? ORDER BY id').all(sessionId) as {
+    const rows = db.prepare('SELECT id, type, uuid, timestamp, content, metadata FROM messages WHERE session_id = ? ORDER BY id').all(sessionId) as {
+      id: number;
       type: string;
       uuid: string | null;
       timestamp: string;
@@ -130,6 +132,7 @@ export class SessionManager {
       timestamp: row.timestamp,
       content: JSON.parse(row.content),
       metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+      id: row.id,
     }));
   }
 

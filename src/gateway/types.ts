@@ -120,6 +120,7 @@ export type RpcMethod =
   | 'tasks.approve'
   | 'tasks.deny'
   | 'skills.list'
+  | 'dev.rebuild'
   | 'config.get'
   | 'config.set'
   | 'fs.list'

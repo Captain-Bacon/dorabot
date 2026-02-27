@@ -23,7 +23,7 @@ import {
   MessageSquare, Radio, Zap, Brain, Settings2,
   Sparkles, LayoutGrid, Loader2, Star,
   Sun, Moon, Clock, FileSearch, Plug, Folder, FolderOpen, X,
-  ShieldAlert, CalendarCheck, Target, FlaskConical, KeyRound, Blocks
+  ShieldAlert, CalendarCheck, Target, FlaskConical, KeyRound, Blocks, Search
 } from 'lucide-react';
 
 type SessionFilter = 'all' | 'desktop' | 'telegram' | 'whatsapp';
@@ -95,6 +95,9 @@ export default function App() {
   const [selectedChannel, setSelectedChannel] = useState<'whatsapp' | 'telegram'>('whatsapp');
   const [showOnboarding, setShowOnboarding] = useState(false);
   const onboardingCheckedRef = useRef(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchDebounceRef = useRef<NodeJS.Timeout>();
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const onboardingCompletedRef = useRef(localStorage.getItem(ONBOARDING_COMPLETED_KEY) === 'true');
   const focusInputOnGroupSwitch = useRef(false);
   const notifCooldownRef = useRef<Record<string, number>>({});
@@ -106,6 +109,7 @@ export default function App() {
   const { theme, toggle: toggleTheme } = useTheme();
   const [updateState, setUpdateState] = useState<UpdateState>({ status: 'idle' });
   const [chatDrafts, setChatDrafts] = useState<Record<string, ChatDraft>>({});
+  const [isRebuilding, setIsRebuilding] = useState(false);
   const notify = useCallback((body: string) => {
     const api = (window as any).electronAPI;
     if (api?.notify) {
@@ -273,6 +277,15 @@ export default function App() {
               onClick: () => tabState.openTab({ id: 'view:goals', type: 'goals', label: 'Goals', closable: true }),
             },
           });
+          break;
+        case 'dev.rebuild.progress' as any: {
+          const data = (event as any).data as { stage: string; status: string; error?: string };
+          if (data.stage === 'error') {
+            toast.error('Build failed', { description: data.error, id: 'rebuild-progress' });
+            setIsRebuilding(false);
+          }
+          break;
+        }
           if (!windowFocused) {
             notify('goals updated');
             playNotifSound();
@@ -347,6 +360,98 @@ export default function App() {
     return gw.sessions.filter(s => (s.channel || 'desktop') === sessionFilter);
   }, [gw.sessions, sessionFilter]);
 
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchQuery(value);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    if (!value.trim()) {
+      gw.clearSearch();
+      return;
+    }
+    searchDebounceRef.current = setTimeout(() => {
+      gw.searchSessions(value, {
+        channel: sessionFilter !== 'all' ? sessionFilter : undefined,
+      });
+    }, 300);
+  }, [gw, sessionFilter]);
+
+  const handleRebuild = useCallback(async () => {
+    if (isRebuilding) return;
+
+    // Check if any agents are running
+    const hasActiveRuns = gw.sessions.some(s => s.status === 'running');
+    if (hasActiveRuns) {
+      toast.error('Cannot rebuild while agents are running', {
+        description: 'Wait for all agents to finish before rebuilding.',
+      });
+      return;
+    }
+
+    setIsRebuilding(true);
+    const rebuildToast = toast.loading('Rebuilding gateway...', { duration: Infinity });
+
+    try {
+      const result = await gw.rpc('dev.rebuild', {}) as { success?: boolean } | null;
+      if (result?.success) {
+        toast.loading('Build complete, restarting gateway...', { id: rebuildToast });
+        // Gateway will process.exit(0) after 1.5s, then respawn.
+        // Poll raw bridge state via electronAPI (bypasses stale React closures).
+        // Bridge states: connecting → connected → authenticated → (or disconnected)
+        // 'authenticated' = fully ready.
+        let sawDisconnect = false;
+        const checkReconnect = setInterval(async () => {
+          try {
+            const state = await (window as any).electronAPI?.gatewayState?.();
+            const s = state?.state;
+            if (s === 'disconnected' || s === 'connecting') {
+              sawDisconnect = true;
+            } else if (sawDisconnect && s === 'authenticated') {
+              clearInterval(checkReconnect);
+              toast.success('Restarted. Reloading...', { id: rebuildToast, duration: 1000 });
+              setTimeout(() => window.location.reload(), 500);
+            }
+          } catch { /* bridge not ready yet */ }
+        }, 500);
+        // Safety: give up after 15s
+        setTimeout(() => {
+          clearInterval(checkReconnect);
+          toast.error('Gateway did not restart in time. Try reloading manually.', { id: rebuildToast, duration: 5000 });
+          setIsRebuilding(false);
+        }, 15000);
+      }
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      toast.error('Build failed', { description: errMsg, id: rebuildToast });
+      setIsRebuilding(false);
+    }
+  }, [gw, isRebuilding]);
+
+  // Re-run search when channel filter changes
+  useEffect(() => {
+    if (searchQuery.trim()) {
+      gw.searchSessions(searchQuery, {
+        channel: sessionFilter !== 'all' ? sessionFilter : undefined,
+      });
+    }
+  }, [sessionFilter, searchQuery, gw]);
+
+  // Keyboard shortcut: Cmd+F focuses search, Escape clears
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        if (searchInputRef.current) {
+          e.preventDefault();
+          searchInputRef.current.focus();
+        }
+      }
+      if (e.key === 'Escape' && searchQuery) {
+        setSearchQuery('');
+        gw.clearSearch();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [searchQuery, gw]);
+
   // Track which sessions are visible across all panes (for sidebar highlighting)
   const visibleSessionIds = useMemo(() => {
     const ids = new Set<string>();
@@ -384,7 +489,7 @@ export default function App() {
     return byId;
   }, [tabState.tabs, tabState.unreadBySession, gw.sessions]);
 
-  const handleViewSession = useCallback((sessionId: string, channel?: string, chatId?: string, chatType?: string) => {
+  const handleViewSession = useCallback((sessionId: string, channel?: string, chatId?: string, chatType?: string, targetMessageId?: number) => {
     const ch = channel || 'desktop';
     const ct = chatType || 'dm';
     const cid = chatId || sessionId;
@@ -399,6 +504,18 @@ export default function App() {
       channel: ch,
       label,
     });
+
+    // Scroll to matched message if specified
+    if (targetMessageId) {
+      setTimeout(() => {
+        const el = document.querySelector(`[data-message-id="${targetMessageId}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('search-highlight');
+          setTimeout(() => el.classList.remove('search-highlight'), 3000);
+        }
+      }, 500);
+    }
   }, [gw.sessions, tabState]);
 
   const handleNavClick = useCallback((navId: TabType) => {
@@ -807,6 +924,29 @@ export default function App() {
         >
           {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
         </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={handleRebuild}
+              disabled={isRebuilding || gw.sessions.some(s => s.status === 'running')}
+              className="ml-1 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ WebkitAppRegion: 'no-drag' } as any}
+            >
+              {isRebuilding ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <FlaskConical className="w-4 h-4" />
+              )}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            {isRebuilding
+              ? 'Rebuilding...'
+              : gw.sessions.some(s => s.status === 'running')
+                ? 'Agents running (wait to rebuild)'
+                : 'Rebuild & Restart'}
+          </TooltipContent>
+        </Tooltip>
         {!layout.isMultiPane && (
           <button
             onClick={() => setShowFiles(v => !v)}
@@ -920,7 +1060,7 @@ export default function App() {
             {gw.sessions.length > 0 && (
               <>
                 <Separator />
-                <div className="shrink-0 px-2 pt-1">
+                <div className="shrink-0 px-2 pt-1 pb-1">
                   <div className="flex items-center px-2.5 py-1">
                     <span className="text-[10px] uppercase tracking-wider text-muted-foreground">sessions</span>
                     <select
@@ -934,9 +1074,79 @@ export default function App() {
                       <option value="whatsapp">whatsapp</option>
                     </select>
                   </div>
+                  <div className="px-2.5 pb-1">
+                    <div className="relative">
+                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+                      <input
+                        ref={searchInputRef}
+                        type="text"
+                        placeholder="Search chats..."
+                        value={searchQuery}
+                        onChange={e => handleSearchChange(e.target.value)}
+                        className="w-full pl-6 pr-6 py-1 text-[10px] bg-secondary border border-border rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                      {searchQuery && (
+                        <button
+                          onClick={() => { setSearchQuery(''); gw.clearSearch(); }}
+                          className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 <ScrollArea className="flex-1 min-h-0 px-2 pb-2">
-                  {filteredSessions.slice(0, 30).map(s => {
+                  {gw.searchState.query ? (
+                    // Search results mode
+                    <>
+                      {gw.searchState.loading && (
+                        <div className="flex items-center gap-1.5 px-2.5 py-2 text-[10px] text-muted-foreground">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Searching...
+                        </div>
+                      )}
+                      {!gw.searchState.loading && gw.searchState.results.length === 0 && (
+                        <div className="px-2.5 py-2 text-[10px] text-muted-foreground">
+                          No results for "{gw.searchState.query}"
+                        </div>
+                      )}
+                      {!gw.searchState.loading && gw.searchState.total > 0 && (
+                        <div className="px-2.5 py-0.5 text-[9px] text-muted-foreground">
+                          {gw.searchState.total} result{gw.searchState.total !== 1 ? 's' : ''}
+                        </div>
+                      )}
+                      {gw.searchState.results.map((r, i) => (
+                        <button
+                          key={`${r.sessionId}-${r.messageId}-${i}`}
+                          className="flex flex-col gap-0.5 w-full px-2.5 py-1.5 rounded-md text-left transition-colors text-muted-foreground hover:bg-secondary/50"
+                          onClick={() => handleViewSession(r.sessionId, r.channel, r.chatId, undefined, r.messageId)}
+                        >
+                          <div className="flex items-center gap-1.5 text-[10px]">
+                            <span className="w-3 h-3 shrink-0 flex items-center justify-center">{channelIcon(r.channel)}</span>
+                            <span className="truncate flex-1 text-foreground">
+                              {r.senderName || r.sessionId.slice(8, 16)}
+                            </span>
+                            <span className="text-[9px] shrink-0">
+                              {new Date(r.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                            </span>
+                          </div>
+                          <div
+                            className="text-[9px] text-muted-foreground line-clamp-2 pl-[18px]"
+                            dangerouslySetInnerHTML={{
+                              __html: r.snippet
+                                .replace(/</g, '&lt;')
+                                .replace(/>/g, '&gt;')
+                                .replace(/&lt;&lt;/g, '<mark class="bg-yellow-500/30 text-foreground rounded-sm px-0.5">')
+                                .replace(/&gt;&gt;/g, '</mark>')
+                            }}
+                          />
+                        </button>
+                      ))}
+                    </>
+                  ) : (
+                    // Normal session list mode
+                    filteredSessions.map(s => {
                     const isActive = tabState.activeTab && isChatTab(tabState.activeTab) && tabState.activeTab.sessionId === s.id;
                     const isVisible = !isActive && visibleSessionIds.has(s.id);
                     const unread = unreadBySessionId[s.id] || 0;
@@ -971,7 +1181,8 @@ export default function App() {
                         )}
                       </button>
                     );
-                  })}
+                    })
+                  )}
                 </ScrollArea>
               </>
             )}

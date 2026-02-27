@@ -125,6 +125,7 @@ export function GoalsView({ gateway, onViewSession, onSetupChat }: Props) {
       await gateway.rpc('tasks.approve', task.approvalRequestId
         ? { requestId: task.approvalRequestId, taskId: task.id }
         : { taskId: task.id });
+      toast.success(`Approved: ${task.title}`);
     });
   }, [gateway, wrap]);
 
@@ -133,6 +134,7 @@ export function GoalsView({ gateway, onViewSession, onSetupChat }: Props) {
       await gateway.rpc('tasks.deny', task.approvalRequestId
         ? { requestId: task.approvalRequestId, taskId: task.id, reason: reason || 'denied by user' }
         : { taskId: task.id, reason: reason || 'denied by user' });
+      toast.success(`Denied: ${task.title}`, reason ? { description: reason } : undefined);
     });
   }, [gateway, wrap]);
 
