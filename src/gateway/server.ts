@@ -2901,6 +2901,16 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
               );
               if (rows.length === 0) break;
               for (const row of rows) {
+                // Skip stale tool_approval events whose requestId is no longer pending
+                if (row.event_type === 'agent.tool_approval') {
+                  try {
+                    const d = JSON.parse(row.data);
+                    if (d.requestId && !pendingApprovals.has(d.requestId) && !pendingTaskApprovals.has(d.requestId)) {
+                      cursorBySession.set(row.session_key, row.seq);
+                      continue;
+                    }
+                  } catch {}
+                }
                 clientWs.send(JSON.stringify({ event: row.event_type, data: JSON.parse(row.data), seq: row.seq }));
                 replayCount += 1;
                 cursorBySession.set(row.session_key, row.seq);

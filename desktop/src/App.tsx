@@ -1003,7 +1003,7 @@ export default function App() {
       )}
 
       {/* main layout */}
-      <ResizablePanelGroup orientation="horizontal" className="flex-1 min-h-0">
+      <ResizablePanelGroup orientation="horizontal" className="flex-1 min-h-0 overflow-hidden">
         {/* sidebar */}
         <ResizablePanel defaultSize="15%" minSize="10%" maxSize="25%" className="bg-card glass overflow-hidden">
           <div className="flex flex-col h-full min-h-0">
