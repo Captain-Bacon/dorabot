@@ -1210,7 +1210,18 @@ export function useGateway() {
             if (!state) return prev;
             return { ...prev, [sk]: { ...DEFAULT_SESSION_STATE } };
           });
+          setContextUsage(prev => {
+            const next = { ...prev };
+            delete next[sk];
+            return next;
+          });
         }
+        break;
+      }
+
+      case 'context.updated': {
+        const d = data as { sessionKey: string; usage: number; limit: number; percentage: number };
+        setContextUsage(prev => ({ ...prev, [d.sessionKey]: { usage: d.usage, limit: d.limit, percentage: d.percentage } }));
         break;
       }
 
@@ -1575,6 +1586,11 @@ export function useGateway() {
     } catch (err) {
       // Stale approval (agent session gone) or network error. Either way, already removed from UI.
     }
+  }, [rpc]);
+
+  const getContextUsage = useCallback(async (channel: string, chatId: string) => {
+    const res = await rpc('sessions.getContextUsage', { channel, chatId });
+    return res as { usage: number; limit: number; percentage: number };
   }, [rpc]);
 
   const resetSession = useCallback(async (channel: string, chatId: string, sessionKey?: string) => {
@@ -1947,6 +1963,8 @@ export function useGateway() {
     notifications,
     approveToolUse,
     denyToolUse,
+    contextUsage,
+    getContextUsage,
     onFileChange,
     getSecuritySenders,
     addSender,

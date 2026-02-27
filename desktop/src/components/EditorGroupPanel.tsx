@@ -173,6 +173,7 @@ export function EditorGroupPanel({
         activeTabId={group.activeTabId || ''}
         sessionStates={gateway.sessionStates}
         unreadBySession={tabState.unreadBySession}
+        contextUsage={gateway.contextUsage}
         isActiveGroup={isActive}
         isMultiPane={isMultiPane}
         groupId={group.id}

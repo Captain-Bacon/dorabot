@@ -8,15 +8,30 @@ export type ChannelHandler = {
   typing?(chatId: string): Promise<void>;
 };
 
-// registry for channel handlers (populated at runtime)
+// registry for channel handlers and owner chat IDs (populated at runtime)
 const channelHandlers = new Map<string, ChannelHandler>();
+const channelOwners = new Map<string, string>();
 
-export function registerChannelHandler(channel: string, handler: ChannelHandler): void {
+export function registerChannelHandler(channel: string, handler: ChannelHandler, ownerChatId?: string): void {
   channelHandlers.set(channel, handler);
+  if (ownerChatId) {
+    channelOwners.set(channel, ownerChatId);
+  }
 }
 
 export function getChannelHandler(channel: string): ChannelHandler | undefined {
   return channelHandlers.get(channel);
+}
+
+// resolve "owner" to actual chat ID
+function resolveTarget(channel: string, target: string): string {
+  if (target.toLowerCase() === 'owner') {
+    const ownerChatId = channelOwners.get(channel);
+    if (ownerChatId) {
+      return ownerChatId;
+    }
+  }
+  return target;
 }
 
 // console fallback handler
@@ -43,7 +58,7 @@ export const messageTool = tool(
   {
     action: z.enum(['send', 'edit', 'delete']),
     channel: z.string().describe('Channel name: whatsapp, telegram, discord, slack, signal, console'),
-    target: z.string().optional().describe('Recipient ID, chat ID, or channel ID'),
+    target: z.string().optional().describe('Recipient ID, chat ID, or channel ID. Use "owner" to send to the configured channel owner.'),
     message: z.string().optional().describe('Message content (for send/edit). Write plain text or markdown. Formatting is converted automatically per channel.'),
     messageId: z.string().optional().describe('Message ID to edit or delete'),
     chatId: z.string().optional().describe('Chat ID (required for edit/delete on some channels)'),
@@ -56,13 +71,14 @@ export const messageTool = tool(
     try {
       switch (args.action) {
         case 'send': {
-          const target = args.target || args.chatId;
+          let target = args.target || args.chatId;
           if (!target || !args.message) {
             return {
               content: [{ type: 'text', text: 'Error: target and message required for send' }],
               isError: true,
             };
           }
+          target = resolveTarget(args.channel, target);
           const result = await handler.send(target, args.message, {
             media: args.media,
             replyTo: args.replyTo,
@@ -79,7 +95,11 @@ export const messageTool = tool(
               isError: true,
             };
           }
-          await handler.edit(args.messageId, args.message, args.chatId || args.target);
+          let chatIdOrTarget = args.chatId || args.target;
+          if (chatIdOrTarget) {
+            chatIdOrTarget = resolveTarget(args.channel, chatIdOrTarget);
+          }
+          await handler.edit(args.messageId, args.message, chatIdOrTarget);
           return {
             content: [{ type: 'text', text: `Message ${args.messageId} edited` }],
           };
@@ -92,7 +112,11 @@ export const messageTool = tool(
               isError: true,
             };
           }
-          await handler.delete(args.messageId, args.chatId || args.target);
+          let chatIdOrTarget = args.chatId || args.target;
+          if (chatIdOrTarget) {
+            chatIdOrTarget = resolveTarget(args.channel, chatIdOrTarget);
+          }
+          await handler.delete(args.messageId, chatIdOrTarget);
           return {
             content: [{ type: 'text', text: `Message ${args.messageId} deleted` }],
           };

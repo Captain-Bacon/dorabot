@@ -44,6 +44,7 @@ export async function startTelegramMonitor(opts: TelegramMonitorOptions): Promis
   const bot: Bot = createTelegramBot({ token });
 
   // register channel handler for the message tool
+  const ownerChatId = opts.allowFrom?.[0];
   registerChannelHandler('telegram', {
     send: async (target, message, sendOpts) => {
       const replyTo = sendOpts?.replyTo ? Number(sendOpts.replyTo) : undefined;
@@ -65,7 +66,7 @@ export async function startTelegramMonitor(opts: TelegramMonitorOptions): Promis
         await bot.api.sendChatAction(Number(chatId), 'typing');
       } catch {}
     },
-  });
+  }, ownerChatId);
 
   // bot commands
   if (opts.onCommand) {

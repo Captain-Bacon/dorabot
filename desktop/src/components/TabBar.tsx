@@ -33,6 +33,7 @@ function DraggableTab({
   isActive,
   isRunning,
   unreadCount,
+  contextUsage,
   groupId,
   onFocusTab,
   onCloseTab,
@@ -41,6 +42,7 @@ function DraggableTab({
   isActive: boolean;
   isRunning: boolean;
   unreadCount: number;
+  contextUsage?: { usage: number; limit: number; percentage: number };
   groupId?: string;
   onFocusTab: (id: string) => void;
   onCloseTab: (id: string) => void;
@@ -82,6 +84,20 @@ function DraggableTab({
         )}
       </span>
       <span className="truncate flex-1">{tab.label}</span>
+      {contextUsage && contextUsage.percentage > 0 && (
+        <span
+          className={cn(
+            "shrink-0 text-[9px] px-1 rounded font-mono",
+            contextUsage.percentage >= 90 ? "bg-destructive/20 text-destructive" :
+            contextUsage.percentage >= 70 ? "bg-orange-500/20 text-orange-600 dark:text-orange-400" :
+            contextUsage.percentage >= 50 ? "bg-blue-500/20 text-blue-600 dark:text-blue-400" :
+            "bg-muted text-muted-foreground"
+          )}
+          title={`Context: ${contextUsage.usage.toLocaleString()} / ${contextUsage.limit.toLocaleString()} tokens`}
+        >
+          {contextUsage.percentage}%
+        </span>
+      )}
       {!isActive && unreadCount > 0 && (
         <span className="shrink-0 rounded-full bg-primary text-primary-foreground text-[9px] px-1.5 min-w-[14px] text-center">
           {unreadCount > 99 ? '99+' : unreadCount}
@@ -112,6 +128,7 @@ type TabBarProps = {
   activeTabId: string;
   sessionStates: Record<string, SessionState>;
   unreadBySession?: Record<string, number>;
+  contextUsage?: Record<string, { usage: number; limit: number; percentage: number }>;
   isActiveGroup?: boolean;
   isMultiPane?: boolean;
   groupId?: string;
@@ -120,7 +137,7 @@ type TabBarProps = {
   onNewChat: () => void;
 };
 
-export function TabBar({ tabs, activeTabId, sessionStates, unreadBySession = {}, isActiveGroup, isMultiPane, groupId, onFocusTab, onCloseTab, onNewChat }: TabBarProps) {
+export function TabBar({ tabs, activeTabId, sessionStates, unreadBySession = {}, contextUsage = {}, isActiveGroup, isMultiPane, groupId, onFocusTab, onCloseTab, onNewChat }: TabBarProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: `group-drop:${groupId || 'default'}`,
     data: { groupId },
@@ -139,6 +156,7 @@ export function TabBar({ tabs, activeTabId, sessionStates, unreadBySession = {},
         {tabs.map(tab => {
           const isActive = tab.id === activeTabId;
           const isRunning = isChatTab(tab) && sessionStates[tab.sessionKey]?.agentStatus !== 'idle' && sessionStates[tab.sessionKey]?.agentStatus != null;
+          const usage = isChatTab(tab) ? contextUsage[tab.sessionKey] : undefined;
 
           return (
             <DraggableTab
@@ -147,6 +165,7 @@ export function TabBar({ tabs, activeTabId, sessionStates, unreadBySession = {},
               isActive={isActive}
               isRunning={isRunning}
               unreadCount={isChatTab(tab) ? (unreadBySession[tab.sessionKey] || 0) : 0}
+              contextUsage={usage}
               groupId={groupId}
               onFocusTab={onFocusTab}
               onCloseTab={onCloseTab}
