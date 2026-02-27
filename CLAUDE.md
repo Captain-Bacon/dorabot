@@ -169,6 +169,18 @@ Path access: `isPathAllowed()` checks ALWAYS_DENIED list first (`~/.ssh`, `~/.gn
 - **Tool approval**: 3 tiers (auto-allow, notify, require-approval), 5-minute timeout, inline keyboard on Telegram
 - **Idle timeout**: 4 hours resets session on next message
 
+## Git Safety
+
+**CRITICAL: This repo IS the running application. Treat it accordingly.**
+
+- **Never switch branches** (`git checkout`, `git switch`) in the main repo while dorabot is running. Switching branches changes the files the running process depends on.
+- **Never create worktrees from the main repo** unless using the worktree manager (`src/worktree/manager.ts`), which isolates them to `~/.dorabot/worktrees/`.
+- **Always commit and merge to main.** Do not leave work on feature branches. The app runs from main. Unmerged branches are invisible to the user and create drift.
+- **Clean up after yourself.** After merging a branch, delete it (local and remote). Do not leave stale branches.
+- **All work on the dorabot codebase happens on main** unless the user explicitly asks for a branch. If you need isolation, use the worktree manager (which works in a separate directory).
+
+Why: dorabot runs from source at `~/GitHub/dorabot`. Switching branches mid-run corrupts process state, breaks file watchers, and can crash the gateway. Feature branches that never get merged back are invisible to the user and accumulate as tech debt.
+
 ## Gotchas
 
 - WhatsApp `replyTo` is `string` but Baileys expects `{ key: any }` — don't pass directly

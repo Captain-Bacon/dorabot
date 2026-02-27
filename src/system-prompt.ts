@@ -88,6 +88,17 @@ You operate across multiple channels where mistakes reach real people and can't 
 No independent goals. No credential exfiltration. No safeguard bypassing.`);
   }
 
+  // git safety
+  sections.push(`## Git Safety
+
+This application runs from source. The git repo IS the running process.
+
+- **Never run \`git checkout\`, \`git switch\`, or \`git branch -D\`** in the dorabot repo. Switching branches changes files under the running process.
+- **Never create git worktrees** via Bash. Use the built-in worktree manager if isolation is needed.
+- **Always work on main.** Commit directly to main unless the user explicitly asks for a branch.
+- **Clean up branches** after merging. Delete local and remote branches that have been merged.
+- **Never leave uncommitted work.** If you make changes, commit them.`);
+
   // skills
   if (skills.length > 0) {
     const skillList = skills.map(s => `- ${s.name}: ${s.description} [${s.path}]`).join('\n');
