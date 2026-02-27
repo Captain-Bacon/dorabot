@@ -559,6 +559,11 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
   const pendingHandoffClears = new Set<string>();
   // accumulated tool log per active run
   const toolLogs = new Map<string, { completed: ToolEntry[]; current: { name: string; inputJson: string; detail: string } | null; lastEditAt: number }>();
+  // context usage tracking (cumulative across turns)
+  const contextUsageMap = new Map<string, { usage: number; limit: number }>();
+  const CONTEXT_LIMIT = 200_000; // tokens
+  // context warning thresholds already sent (don't spam warnings)
+  const contextWarningMap = new Map<string, Set<number>>();
   // active RunHandles for message injection into running agent sessions
   const runHandles = new Map<string, RunHandle>();
   type RunReplyRef = {
@@ -2239,6 +2244,7 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           .map(s => ({ channel: s.channel, chatId: ownerChatIds.get(s.channel)! }));
         const pulseItem = scheduler?.listItems().find(i => i.id === AUTONOMOUS_SCHEDULE_ID);
         const lastPulseAt = pulseItem?.lastRunAt ? new Date(pulseItem.lastRunAt).getTime() : undefined;
+        const currentContextUsage = contextUsageMap.get(sessionKey);
         const gen = streamAgent({
           prompt,
           images,
@@ -2255,6 +2261,7 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           messageMetadata,
           onRunReady: (handle) => { runHandles.set(sessionKey, handle); },
           lastPulseAt,
+          contextUsage: currentContextUsage,
         });
 
         let agentText = '';
@@ -2714,6 +2721,61 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
             finishPlanRun(sessionKey, 'completed');
             finishTaskRun(sessionKey, 'completed');
 
+            // update cumulative context usage
+            const currentUsage = contextUsageMap.get(sessionKey) || { usage: 0, limit: CONTEXT_LIMIT };
+            const newUsage = currentUsage.usage + agentUsage.inputTokens;
+            contextUsageMap.set(sessionKey, { usage: newUsage, limit: CONTEXT_LIMIT });
+            const percentage = Math.round((newUsage / CONTEXT_LIMIT) * 100);
+
+            // broadcast context usage update
+            const runCtx = channelRunContexts.get(sessionKey);
+            const ctxChatId = runCtx?.chatId || sessionKey.split(':').slice(2).join(':');
+            broadcast({
+              event: 'context.updated',
+              data: {
+                sessionKey,
+                channel: runCtx?.channel || channel,
+                chatId: ctxChatId,
+                usage: newUsage,
+                limit: CONTEXT_LIMIT,
+                percentage,
+              },
+            });
+
+            // check if warning thresholds crossed
+            const thresholds = [25, 50, 60, 70, 80, 85, 90, 95];
+            const warned = contextWarningMap.get(sessionKey) || new Set<number>();
+            for (const threshold of thresholds) {
+              if (percentage >= threshold && !warned.has(threshold)) {
+                warned.add(threshold);
+                contextWarningMap.set(sessionKey, warned);
+
+                // determine severity
+                let status = '📊 INFO';
+                if (percentage >= 90) status = '🚨🔥🚨 CRITICAL';
+                else if (percentage >= 80) status = '🚨 HIGH';
+                else if (percentage >= 60) status = '⚠️ MEDIUM';
+
+                const warningMsg = `${status} — Context ${percentage}% full (${Math.round(newUsage / 1000)}k / ${Math.round(CONTEXT_LIMIT / 1000)}k tokens)\n\n${
+                  percentage >= 90
+                    ? '🔥 URGENT: Use `/handoff` immediately or conversation will fail!\n\nYour next response may exceed limits. Write a handoff now.'
+                    : percentage >= 80
+                    ? '⚠️ Strongly recommend `/handoff` for ongoing work.\n\nIf this task will continue, preserve context with a handoff before it fills completely.'
+                    : percentage >= 70
+                    ? '⚠️ Consider wrapping up or using `/handoff` if work will continue.\n\nYou have room for a few more turns, but plan an exit strategy.'
+                    : ''
+                }`;
+
+                // send warning to active chat
+                if (ctx?.chatId) {
+                  const h = getChannelHandler(ctx.channel);
+                  if (h) {
+                    try { await h.send(ctx.chatId, warningMsg); } catch {}
+                  }
+                }
+              }
+            }
+
             // per-turn: mark idle so sidebar spinner stops
             sessionRegistry.setActiveRun(sessionKey, false);
             broadcastStatus(sessionKey, 'idle');
@@ -2821,6 +2883,8 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
             fileSessionManager.setMetadata(session.sessionId, { sdkSessionId: undefined });
           }
           sessionRegistry.remove(sessionKey);
+          contextUsageMap.delete(sessionKey);
+          contextWarningMap.delete(sessionKey);
           // Notify messaging channels
           const clearChannel = sessionKey.split(':')[0];
           const clearChatId = sessionKey.split(':').slice(2).join(':');
@@ -3333,7 +3397,19 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           const oldSession = sessionRegistry.get(key);
           if (oldSession) fileSessionManager.setMetadata(oldSession.sessionId, { sdkSessionId: undefined });
           sessionRegistry.remove(key);
+          contextUsageMap.delete(key);
+          contextWarningMap.delete(key);
           return { id, result: { reset: true, key } };
+        }
+
+        case 'sessions.getContextUsage': {
+          const channel = params?.channel as string;
+          const chatId = params?.chatId as string;
+          if (!channel || !chatId) return { id, error: 'channel and chatId required' };
+          const key = sessionRegistry.makeKey({ channel, chatId });
+          const usage = contextUsageMap.get(key) || { usage: 0, limit: CONTEXT_LIMIT };
+          const percentage = Math.round((usage.usage / usage.limit) * 100);
+          return { id, result: { usage: usage.usage, limit: usage.limit, percentage } };
         }
 
         case 'sessions.resume': {

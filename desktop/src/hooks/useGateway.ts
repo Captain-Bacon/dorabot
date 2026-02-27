@@ -510,6 +510,7 @@ export function useGateway() {
     maxQueueDepth: 0,
     bufferedAmountMax: 0,
   });
+  const [contextUsage, setContextUsage] = useState<Record<string, { usage: number; limit: number; percentage: number }>>({});
 
   const fsChangeListenersRef = useRef<Set<(path: string) => void>>(new Set());
 

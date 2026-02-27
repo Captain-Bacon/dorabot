@@ -15,6 +15,7 @@ export type SystemPromptOptions = {
   extraContext?: string;
   workspaceFiles?: WorkspaceFiles;
   lastPulseAt?: number;
+  contextUsage?: { usage: number; limit: number };
 };
 
 export function buildSystemPrompt(opts: SystemPromptOptions): string {
@@ -39,6 +40,33 @@ Minimum complexity for the current task.
 </avoid_overengineering>
 
 Your context window may be compacted as it approaches limits. Do not stop work early because of this. Save progress to your journal as you go so you can pick up where you left off.`);
+
+  // context usage (if available)
+  if (opts.contextUsage) {
+    const { usage, limit } = opts.contextUsage;
+    const percentage = Math.round((usage / limit) * 100);
+    let status = '📊 INFO';
+    let guidance = '';
+
+    if (percentage >= 90) {
+      status = '🚨🔥🚨 CRITICAL';
+      guidance = `
+**URGENT**: Use \`session_handoff\` tool IMMEDIATELY or conversation will fail!
+Your next response may exceed limits. Write a handoff now, then use \`/handoff\` command.`;
+    } else if (percentage >= 80) {
+      status = '🚨 HIGH';
+      guidance = `
+**Strongly recommend handoff**: If this work will continue, use \`session_handoff\` tool to preserve context before it fills completely.`;
+    } else if (percentage >= 70) {
+      status = '⚠️ MEDIUM';
+      guidance = `
+**Consider handoff**: You have room for a few more turns. If this task will continue much longer, plan to use \`session_handoff\` tool soon.`;
+    }
+
+    sections.push(`## Context Usage
+
+${status} — ${percentage}% full (${Math.round(usage / 1000)}k / ${Math.round(limit / 1000)}k tokens)${guidance ? `\n${guidance}` : ''}`);
+  }
 
   // interaction style
   sections.push(`## Interaction Style

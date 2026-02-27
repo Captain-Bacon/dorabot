@@ -108,6 +108,7 @@ export type AgentOptions = {
   messageMetadata?: MessageMetadata;
   onRunReady?: (handle: RunHandle) => void;
   lastPulseAt?: number;
+  contextUsage?: { usage: number; limit: number };
 };
 
 export type AgentResult = {
@@ -172,6 +173,7 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
     extraContext,
     workspaceFiles,
     lastPulseAt,
+    contextUsage: opts.contextUsage,
   });
 
   // create MCP server for custom tools
@@ -351,6 +353,7 @@ export async function* streamAgent(opts: AgentOptions): AsyncGenerator<unknown, 
     extraContext,
     workspaceFiles,
     lastPulseAt,
+    contextUsage: opts.contextUsage,
   });
 
   const mcpServer = createAgentMcpServer();

@@ -92,6 +92,7 @@ export type RpcMethod =
   | 'sessions.delete'
   | 'sessions.reset'
   | 'sessions.resume'
+  | 'sessions.getContextUsage'
   | 'channels.status'
   | 'channels.start'
   | 'channels.stop'
