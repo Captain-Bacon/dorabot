@@ -147,7 +147,10 @@ export async function startTelegramMonitor(opts: TelegramMonitorOptions): Promis
 
     try {
       const label = approved ? '\u2705 Approved' : '\u274c Denied';
-      await ctx.editMessageText(`${ctx.callbackQuery.message?.text || ''}\n\n${label}`, { parse_mode: 'HTML' });
+      await ctx.editMessageText(`${ctx.callbackQuery.message?.text || ''}\n\n${label}`, {
+        parse_mode: 'HTML',
+        reply_markup: { inline_keyboard: [] }, // remove Allow/Deny buttons
+      });
     } catch {}
     await ctx.answerCallbackQuery(approved ? 'Approved' : 'Denied');
   });
@@ -317,7 +320,10 @@ export async function startTelegramMonitor(opts: TelegramMonitorOptions): Promis
     if (!tracked) return;
     approvalMessages.delete(requestId);
     try {
-      await bot.api.editMessageText(tracked.chatId, tracked.messageId, `${tracked.text}\n\n${outcome}`, { parse_mode: 'HTML' });
+      await bot.api.editMessageText(tracked.chatId, tracked.messageId, `${tracked.text}\n\n${outcome}`, {
+        parse_mode: 'HTML',
+        reply_markup: { inline_keyboard: [] }, // remove Allow/Deny buttons
+      });
     } catch {}
   };
 

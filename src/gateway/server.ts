@@ -2930,8 +2930,8 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
               if (snap.pendingQuestionStatus && snap.pendingQuestionStatus !== 'pending') {
                 snapshotData = { ...snapshotData, pendingQuestion: null };
               }
-              // Clear stale pending approvals that no longer exist in the approval map
-              if (snap.pendingApproval && !pendingApprovals.has(snap.pendingApproval.requestId)) {
+              // Clear stale pending approvals that no longer exist in either approval map
+              if (snap.pendingApproval && !pendingApprovals.has(snap.pendingApproval.requestId) && !pendingTaskApprovals.has(snap.pendingApproval.requestId)) {
                 snapshotData = { ...snapshotData, pendingApproval: null };
                 snap.pendingApproval = null; // also fix the source snapshot
               }

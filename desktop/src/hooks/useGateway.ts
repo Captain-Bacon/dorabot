@@ -486,6 +486,7 @@ export function useGateway() {
     loading: false,
   });
   const [pendingApprovals, setPendingApprovals] = useState<ToolApproval[]>([]);
+  const resolvedApprovalIds = useRef<Set<string>>(new Set());
   const [notifications, setNotifications] = useState<ToolNotification[]>([]);
   const [whatsappQr, setWhatsappQr] = useState<string | null>(null);
   const [whatsappLoginStatus, setWhatsappLoginStatus] = useState<string>('unknown');
@@ -1069,6 +1070,8 @@ export function useGateway() {
         setPendingApprovals(prev => {
           const withoutSession = prev.filter(a => a.sessionKey !== sk);
           if (!snap.pendingApproval) return withoutSession;
+          // Don't re-add approvals that were already resolved locally
+          if (resolvedApprovalIds.current.has(snap.pendingApproval.requestId)) return withoutSession;
           return [...withoutSession, {
             requestId: snap.pendingApproval.requestId,
             toolName: snap.pendingApproval.toolName,
@@ -1225,6 +1228,7 @@ export function useGateway() {
 
       case 'agent.tool_approval_resolved': {
         const d = data as { requestId: string };
+        resolvedApprovalIds.current.add(d.requestId);
         setPendingApprovals(prev => prev.filter(a => a.requestId !== d.requestId));
         break;
       }
@@ -1553,20 +1557,22 @@ export function useGateway() {
   }, []);
 
   const approveToolUse = useCallback(async (requestId: string, modifiedInput?: Record<string, unknown>) => {
+    resolvedApprovalIds.current.add(requestId);
+    setPendingApprovals(prev => prev.filter(a => a.requestId !== requestId));
     try {
       await rpc('tool.approve', { requestId, modifiedInput });
-      setPendingApprovals(prev => prev.filter(a => a.requestId !== requestId));
     } catch (err) {
-      console.error('failed to approve:', err);
+      // Stale approval (agent session gone) or network error. Either way, already removed from UI.
     }
   }, [rpc]);
 
   const denyToolUse = useCallback(async (requestId: string, reason?: string) => {
+    resolvedApprovalIds.current.add(requestId);
+    setPendingApprovals(prev => prev.filter(a => a.requestId !== requestId));
     try {
       await rpc('tool.deny', { requestId, reason });
-      setPendingApprovals(prev => prev.filter(a => a.requestId !== requestId));
     } catch (err) {
-      console.error('failed to deny:', err);
+      // Stale approval (agent session gone) or network error. Either way, already removed from UI.
     }
   }, [rpc]);
 
