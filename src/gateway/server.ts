@@ -47,7 +47,7 @@ import {
 } from '../tools/tasks.js';
 import { loadResearch, saveResearch, readResearchContent, writeResearchFile, nextId as nextResearchId, type ResearchItem } from '../tools/research.js';
 import { getAllAgents, getBuiltInAgents, isBuiltInAgent } from '../agents/definitions.js';
-import { loadManifest, addLibrary, removeLibrary, reindexLibraryById, searchLibraries, getLibraryStats, type Library } from '../tools/library.js';
+import { loadManifest, addLibrary, removeLibrary, reindexLibraryById, searchLibraries, getLibraryStats, getSearchStatus, type Library } from '../tools/library.js';
 import { getProvider, getProviderByName, disposeAllProviders } from '../providers/index.js';
 import { isClaudeInstalled, hasOAuthTokens, getApiKey as getClaudeApiKey, getActiveAuthMethod, isOAuthTokenExpired, onClaudeAuthRequired } from '../providers/claude.js';
 import { isCodexInstalled, hasCodexAuth, onCodexAuthRequired } from '../providers/codex.js';
@@ -4008,14 +4008,17 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           const tasks = loadTasks();
           const task = tasks.tasks.find(t => t.id === taskId);
           if (!task) return { id, error: 'task not found' };
-          if (task.status === 'planned' || task.approvalRequestId) {
-            const requestId = task.approvalRequestId || randomUUID();
+
+          // If not yet approved, approve first then start
+          if (task.approvalRequestId) {
+            const requestId = task.approvalRequestId;
             pendingTaskApprovals.delete(requestId);
             const startedFromApproval = await handleTaskApprovalDecision(task.id, requestId, true, undefined, mode);
             if (!startedFromApproval) return { id, error: 'task approval failed' };
             return { id, result: startedFromApproval };
           }
 
+          // Already approved or ready: just start execution
           const started = await startTaskExecution(task.id, mode);
           return { id, result: started };
         }
@@ -4023,6 +4026,7 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
         case 'tasks.approve': {
           const requestId = params?.requestId as string | undefined;
           const taskId = params?.taskId as string | undefined;
+          const autoStart = params?.autoStart === true;
 
           let finalTaskId = taskId;
           let finalRequestId = requestId;
@@ -4035,8 +4039,26 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           }
           if (!finalTaskId || !finalRequestId) return { id, error: 'taskId or requestId required' };
           pendingTaskApprovals.delete(finalRequestId);
-          await handleTaskApprovalDecision(finalTaskId, finalRequestId, true);
-          return { id, result: { approved: true, taskId: finalTaskId } };
+
+          if (autoStart) {
+            // Approve AND start immediately (old behaviour)
+            const startResult = await handleTaskApprovalDecision(finalTaskId, finalRequestId, true);
+            return { id, result: { approved: true, taskId: finalTaskId, started: true, ...(startResult || {}) } };
+          } else {
+            // Approve only: mark approved, keep status planned, don't execute
+            const tasks = loadTasks();
+            const task = tasks.tasks.find(t => t.id === finalTaskId);
+            if (!task) return { id, error: 'task not found' };
+            task.approvedAt = new Date().toISOString();
+            task.reason = undefined;
+            task.updatedAt = task.approvedAt;
+            task.approvalRequestId = undefined;
+            saveTasks(tasks);
+            appendTaskLog(task.id, 'approved', 'Task approved (ready for pickup)');
+            broadcast({ event: 'goals.update', data: { taskId: task.id, task } });
+            void sendTelegramOwnerStatus(`✅ Task #${task.id} approved: ${task.title}`);
+          }
+          return { id, result: { approved: true, taskId: finalTaskId, started: autoStart } };
         }
 
         case 'tasks.deny': {
@@ -4856,7 +4878,7 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           const manifest = loadManifest();
           const libs = manifest.libraries.map(lib => {
             const stats = getLibraryStats(lib.id);
-            return { ...lib, fileCount: stats?.fileCount ?? 0, chunkCount: stats?.chunkCount ?? 0 };
+            return { ...lib, fileCount: stats?.fileCount ?? 0, chunkCount: stats?.chunkCount ?? 0, hasVectors: stats?.hasVectors ?? false };
           });
           return { id, result: libs };
         }
@@ -4872,7 +4894,7 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
               fileTypes: params?.fileTypes as string[],
             });
             const stats = getLibraryStats(lib.id);
-            return { id, result: { ...lib, fileCount: stats?.fileCount ?? 0, chunkCount: stats?.chunkCount ?? 0 } };
+            return { id, result: { ...lib, fileCount: stats?.fileCount ?? 0, chunkCount: stats?.chunkCount ?? 0, hasVectors: stats?.hasVectors ?? false } };
           } catch (err) {
             return { id, error: err instanceof Error ? err.message : String(err) };
           }
@@ -4905,7 +4927,16 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
             const manifest = loadManifest();
             const lib = manifest.libraries.find(l => l.id === params?.id);
             const stats = lib ? getLibraryStats(lib.id) : null;
-            return { id, result: { reindexed: true, fileCount: stats?.fileCount ?? 0, chunkCount: stats?.chunkCount ?? 0 } };
+            return { id, result: { reindexed: true, fileCount: stats?.fileCount ?? 0, chunkCount: stats?.chunkCount ?? 0, hasVectors: stats?.hasVectors ?? false } };
+          } catch (err) {
+            return { id, error: err instanceof Error ? err.message : String(err) };
+          }
+        }
+
+        case 'libraries.searchStatus': {
+          try {
+            const status = await getSearchStatus();
+            return { id, result: status };
           } catch (err) {
             return { id, error: err instanceof Error ? err.message : String(err) };
           }

@@ -31,6 +31,7 @@ type LibraryInfo = {
   updatedAt: number;
   fileCount: number;
   chunkCount: number;
+  hasVectors: boolean;
 };
 
 type SearchResultItem = {
@@ -39,6 +40,7 @@ type SearchResultItem = {
   filePath: string;
   chunk: string;
   score: number;
+  searchType?: 'keyword' | 'semantic' | 'hybrid';
 };
 
 type Props = {
@@ -234,7 +236,14 @@ export function LibrariesView({ gateway }: Props) {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
                             <Badge variant="outline" className="text-[9px] h-4">{result.libraryName}</Badge>
-                            <span className="text-[9px] text-muted-foreground">score: {result.score.toFixed(1)}</span>
+                            <span className="text-[9px] text-muted-foreground">score: {result.score.toFixed(4)}</span>
+                            {result.searchType && (
+                              <Badge variant="secondary" className={`text-[8px] h-3.5 ${
+                                result.searchType === 'hybrid' ? 'bg-purple-500/10 text-purple-400' :
+                                result.searchType === 'semantic' ? 'bg-blue-500/10 text-blue-400' :
+                                'bg-gray-500/10 text-gray-400'
+                              }`}>{result.searchType}</Badge>
+                            )}
                           </div>
                           <button
                             className="text-[10px] text-primary hover:underline truncate block max-w-full text-left"
@@ -393,6 +402,11 @@ function LibraryCard({
             <Hash className="w-2.5 h-2.5" />
             {library.chunkCount} chunks
           </span>
+          {library.hasVectors ? (
+            <Badge variant="secondary" className="text-[8px] h-3.5 bg-purple-500/10 text-purple-400 border-purple-500/20">hybrid</Badge>
+          ) : (
+            <Badge variant="secondary" className="text-[8px] h-3.5 bg-gray-500/10 text-gray-400">keyword</Badge>
+          )}
           <span className="flex-1" />
           {reindexing && <Loader2 className="w-3 h-3 animate-spin text-primary shrink-0" />}
         </button>

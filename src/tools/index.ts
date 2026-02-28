@@ -30,7 +30,7 @@ export {
   type TasksState,
 } from './tasks.js';
 export { loadResearch, saveResearch, type Research, type ResearchItem } from './research.js';
-export { libraryTools, type Library, type LibraryManifest, type SearchResult } from './library.js';
+export { libraryTools, configureOllama, getSearchStatus, type Library, type LibraryManifest, type SearchResult } from './library.js';
 
 // all custom tools for this agent
 const customTools = [
