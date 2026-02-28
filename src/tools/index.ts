@@ -8,6 +8,7 @@ import { tasksTools } from './tasks.js';
 import { researchTools } from './research.js';
 import { memoryTools } from './memory.js';
 import { handoffTool } from './handoff.js';
+// import { libraryTools } from './library.js';
 
 export { messageTool, registerChannelHandler, getChannelHandler, type ChannelHandler } from './messaging.js';
 export { setScheduler, getScheduler } from './calendar.js';
@@ -29,6 +30,7 @@ export {
   type TasksState,
 } from './tasks.js';
 export { loadResearch, saveResearch, type Research, type ResearchItem } from './research.js';
+// export { libraryTools, type Library, type LibraryManifest, type SearchResult } from './library.js';
 
 // all custom tools for this agent
 const customTools = [
@@ -41,6 +43,7 @@ const customTools = [
   ...tasksTools,
   ...researchTools,
   ...memoryTools,
+  // ...libraryTools,
 ];
 
 export function createAgentMcpServer() {

@@ -912,7 +912,6 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
     messageId: string,
     messageText: string,
   ): void {
-    if (!isMarkedRunSource(source)) return;
     const sessionId = sessionRegistry.get(sessionKey)?.sessionId;
     if (!sessionId) return;
 

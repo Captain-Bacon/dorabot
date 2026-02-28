@@ -37,6 +37,8 @@
     "ical-generator": "^10.0.0",
     "luxon": "^3.7.2",
     "mime-types": "^3.0.2",
+    "minisearch": "^7.2.0",
+    "pdf-parse": "^2.4.5",
     "playwright-core": "^1.58.2",
     "qrcode-terminal": "^0.12.0",
     "rrule": "^2.8.1",
