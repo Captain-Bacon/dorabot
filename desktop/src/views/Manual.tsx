@@ -89,8 +89,15 @@ export function ManualView({ gateway }: Props) {
   // Scroll to section
   const scrollToSection = useCallback((id: string) => {
     const element = document.getElementById(id);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const viewport = contentRef.current?.closest('[data-radix-scroll-area-viewport]');
+
+    if (element && viewport) {
+      const viewportElement = viewport as HTMLElement;
+      const elementTop = element.offsetTop;
+      viewportElement.scrollTo({
+        top: elementTop - 80, // offset for header spacing
+        behavior: 'smooth'
+      });
       setActiveSection(id);
     }
   }, []);
@@ -98,6 +105,9 @@ export function ManualView({ gateway }: Props) {
   // Intersection observer for active section
   useEffect(() => {
     if (!contentRef.current) return;
+
+    const viewport = contentRef.current.closest('[data-radix-scroll-area-viewport]');
+    if (!viewport) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -107,7 +117,11 @@ export function ManualView({ gateway }: Props) {
           }
         }
       },
-      { threshold: 0.5, rootMargin: '-20% 0px -70% 0px' }
+      {
+        root: viewport as Element,
+        threshold: 0.5,
+        rootMargin: '-20% 0px -70% 0px'
+      }
     );
 
     const headingElements = contentRef.current.querySelectorAll('h1, h2, h3');
