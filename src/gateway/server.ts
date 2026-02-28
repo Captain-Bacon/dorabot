@@ -2681,6 +2681,11 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
               totalCostUsd: (m.total_cost_usd as number) || 0,
             };
 
+            // compute cumulative context usage before broadcasting result
+            const currentUsagePre = contextUsageMap.get(sessionKey) || { usage: 0, limit: CONTEXT_LIMIT };
+            const cumulativeUsage = currentUsagePre.usage + agentUsage.inputTokens;
+            const cumulativePercentage = Math.round((cumulativeUsage / CONTEXT_LIMIT) * 100);
+
             // per-turn: broadcast agent.result so desktop sets agentStatus to idle
             const resultEvent: WsEvent = {
               event: 'agent.result',
@@ -2690,6 +2695,7 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
                 sessionId: agentSessionId || '',
                 result: agentText,
                 usage: agentUsage,
+                contextUsage: { usage: cumulativeUsage, limit: CONTEXT_LIMIT, percentage: cumulativePercentage },
                 timestamp: Date.now(),
               },
             };

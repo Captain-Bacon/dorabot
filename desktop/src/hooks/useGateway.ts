@@ -789,9 +789,13 @@ export function useGateway() {
       }
 
       case 'agent.result': {
-        const d = data as { sessionKey?: string; sessionId: string; result: string; usage?: { totalCostUsd?: number } };
+        const d = data as { sessionKey?: string; sessionId: string; result: string; usage?: { totalCostUsd?: number }; contextUsage?: { usage: number; limit: number; percentage: number } };
         const sk = d.sessionKey;
         if (!sk || !trackedSessionsRef.current.has(sk)) break;
+        // update context usage from agent.result (reliable delivery, same subscription)
+        if (d.contextUsage && d.contextUsage.percentage > 0) {
+          setContextUsage(prev => ({ ...prev, [sk]: d.contextUsage! }));
+        }
         // flush any pending stream deltas before marking streaming:false
         if (streamFlushTimerRef.current !== null) {
           clearTimeout(streamFlushTimerRef.current);
