@@ -1013,6 +1013,23 @@ export function ChatView({ gateway, chatItems, agentStatus, pendingQuestion, ses
               <Paperclip className="w-4 h-4 text-muted-foreground" />
             </Button>
             <span className="flex-1" />
+            {(() => {
+              const cu = sessionKey ? gateway.contextUsage?.[sessionKey] : undefined;
+              if (!cu || cu.percentage <= 0) return null;
+              return (
+                <span
+                  className={cn(
+                    "text-[10px] tabular-nums mr-2",
+                    cu.percentage >= 90 ? "text-destructive font-medium" :
+                    cu.percentage >= 70 ? "text-orange-500 dark:text-orange-400" :
+                    "text-muted-foreground"
+                  )}
+                  title={`Context: ${cu.usage.toLocaleString()} / ${cu.limit.toLocaleString()} tokens`}
+                >
+                  {cu.percentage}% context
+                </span>
+              );
+            })()}
             {isRunning ? (
               <Button
                 size="sm"
