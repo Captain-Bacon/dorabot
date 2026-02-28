@@ -17,8 +17,9 @@ import {
 } from '@/components/ui/dialog';
 import {
   Bot, Copy, Trash2, Plus, ChevronRight, ChevronDown,
-  Wrench, Brain, Pencil, Check, AlertTriangle,
+  Wrench, Brain, Pencil, Check, AlertTriangle, Network,
 } from 'lucide-react';
+import { SystemDiagrams } from './infrastructure/SystemDiagrams';
 
 type AgentSummary = {
   name: string;
@@ -37,7 +38,10 @@ type Props = {
   gateway: ReturnType<typeof useGateway>;
 };
 
+type Section = 'agents' | 'system';
+
 export function InfrastructureView({ gateway }: Props) {
+  const [section, setSection] = useState<Section>('agents');
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
   const [agentDetail, setAgentDetail] = useState<AgentDetail | null>(null);
@@ -138,119 +142,144 @@ export function InfrastructureView({ gateway }: Props) {
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* tab bar */}
+      {/* top-level section tabs */}
       <div className="flex items-center gap-1 px-3 py-2 border-b border-border shrink-0">
-        <button className="flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] bg-secondary text-foreground font-semibold">
+        <button
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] transition-colors ${
+            section === 'agents' ? 'bg-secondary text-foreground font-semibold' : 'text-muted-foreground hover:bg-secondary/50'
+          }`}
+          onClick={() => setSection('agents')}
+        >
           <Bot className="w-3 h-3" />
           Agents
         </button>
-        {!connected && <Badge variant="destructive" className="text-[9px] h-4 ml-auto">disconnected</Badge>}
-        <div className="flex-1" />
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-6 text-[10px] gap-1"
-          onClick={() => { setShowBuilder(true); setEditAgent(null); }}
-          disabled={!connected}
+        <button
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] transition-colors ${
+            section === 'system' ? 'bg-secondary text-foreground font-semibold' : 'text-muted-foreground hover:bg-secondary/50'
+          }`}
+          onClick={() => setSection('system')}
         >
-          <Plus className="w-3 h-3" />
-          New Agent
-        </Button>
+          <Network className="w-3 h-3" />
+          System
+        </button>
+        {!connected && <Badge variant="destructive" className="text-[9px] h-4 ml-auto">disconnected</Badge>}
+        {section === 'agents' && (
+          <>
+            <div className="flex-1" />
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 text-[10px] gap-1"
+              onClick={() => { setShowBuilder(true); setEditAgent(null); }}
+              disabled={!connected}
+            >
+              <Plus className="w-3 h-3" />
+              New Agent
+            </Button>
+          </>
+        )}
       </div>
 
-      <ScrollArea className="flex-1 min-h-0">
-        <div className="p-4 space-y-4 max-w-2xl">
+      {/* Section content */}
+      {section === 'system' ? (
+        <SystemDiagrams />
+      ) : (
+        <>
+          <ScrollArea className="flex-1 min-h-0">
+            <div className="p-4 space-y-4 max-w-2xl">
 
-          {/* built-in agents */}
-          <div>
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
-              Built-in Agents ({builtIn.length})
-            </div>
-            <div className="space-y-1">
-              {builtIn.map(agent => (
-                <AgentCard
-                  key={agent.name}
-                  agent={agent}
-                  expanded={expandedAgent === agent.name}
-                  detail={expandedAgent === agent.name ? agentDetail : null}
-                  onExpand={() => handleExpand(agent.name)}
-                  onToggle={() => handleToggle(agent.name)}
-                  onDuplicate={() => handleDuplicate(agent.name)}
-                  onDelete={null}
-                  onEdit={null}
-                />
-              ))}
-            </div>
-          </div>
-
-          {/* custom agents */}
-          <div>
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
-              Custom Agents ({custom.length})
-            </div>
-            {custom.length === 0 ? (
-              <Card>
-                <CardContent className="p-4 text-center">
-                  <p className="text-xs text-muted-foreground">
-                    No custom agents yet. Create one or duplicate a built-in agent to get started.
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-1">
-                {custom.map(agent => (
-                  <AgentCard
-                    key={agent.name}
-                    agent={agent}
-                    expanded={expandedAgent === agent.name}
-                    detail={expandedAgent === agent.name ? agentDetail : null}
-                    onExpand={() => handleExpand(agent.name)}
-                    onToggle={() => handleToggle(agent.name)}
-                    onDuplicate={() => handleDuplicate(agent.name)}
-                    onDelete={() => setDeleteConfirm(agent.name)}
-                    onEdit={() => {
-                      if (agentDetail?.name === agent.name) {
-                        setEditAgent(agentDetail);
-                      } else {
-                        gateway.rpc('agents.get', { name: agent.name }).then((r: any) => setEditAgent(r));
-                      }
-                    }}
-                  />
-                ))}
+              {/* built-in agents */}
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+                  Built-in Agents ({builtIn.length})
+                </div>
+                <div className="space-y-1">
+                  {builtIn.map(agent => (
+                    <AgentCard
+                      key={agent.name}
+                      agent={agent}
+                      expanded={expandedAgent === agent.name}
+                      detail={expandedAgent === agent.name ? agentDetail : null}
+                      onExpand={() => handleExpand(agent.name)}
+                      onToggle={() => handleToggle(agent.name)}
+                      onDuplicate={() => handleDuplicate(agent.name)}
+                      onDelete={null}
+                      onEdit={null}
+                    />
+                  ))}
+                </div>
               </div>
-            )}
-          </div>
-        </div>
-      </ScrollArea>
 
-      {/* Builder dialog */}
-      {(showBuilder || editAgent) && (
-        <AgentBuilderDialog
-          initial={editAgent}
-          onSave={editAgent ? handleSaveEdit : handleSaveNew}
-          onClose={() => { setShowBuilder(false); setEditAgent(null); }}
-        />
+              {/* custom agents */}
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+                  Custom Agents ({custom.length})
+                </div>
+                {custom.length === 0 ? (
+                  <Card>
+                    <CardContent className="p-4 text-center">
+                      <p className="text-xs text-muted-foreground">
+                        No custom agents yet. Create one or duplicate a built-in agent to get started.
+                      </p>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className="space-y-1">
+                    {custom.map(agent => (
+                      <AgentCard
+                        key={agent.name}
+                        agent={agent}
+                        expanded={expandedAgent === agent.name}
+                        detail={expandedAgent === agent.name ? agentDetail : null}
+                        onExpand={() => handleExpand(agent.name)}
+                        onToggle={() => handleToggle(agent.name)}
+                        onDuplicate={() => handleDuplicate(agent.name)}
+                        onDelete={() => setDeleteConfirm(agent.name)}
+                        onEdit={() => {
+                          if (agentDetail?.name === agent.name) {
+                            setEditAgent(agentDetail);
+                          } else {
+                            gateway.rpc('agents.get', { name: agent.name }).then((r: any) => setEditAgent(r));
+                          }
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </ScrollArea>
+
+          {/* Builder dialog */}
+          {(showBuilder || editAgent) && (
+            <AgentBuilderDialog
+              initial={editAgent}
+              onSave={editAgent ? handleSaveEdit : handleSaveNew}
+              onClose={() => { setShowBuilder(false); setEditAgent(null); }}
+            />
+          )}
+
+          {/* Delete confirmation */}
+          <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+            <DialogContent className="max-w-sm">
+              <DialogHeader>
+                <DialogTitle className="text-sm">Delete Agent</DialogTitle>
+                <DialogDescription className="text-xs">
+                  Are you sure you want to delete <span className="font-semibold">{deleteConfirm}</span>? This cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button size="sm" variant="outline" onClick={() => setDeleteConfirm(null)} className="text-[11px] h-7">
+                  Cancel
+                </Button>
+                <Button size="sm" variant="destructive" onClick={() => deleteConfirm && handleDelete(deleteConfirm)} className="text-[11px] h-7">
+                  Delete
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </>
       )}
-
-      {/* Delete confirmation */}
-      <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-sm">Delete Agent</DialogTitle>
-            <DialogDescription className="text-xs">
-              Are you sure you want to delete <span className="font-semibold">{deleteConfirm}</span>? This cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button size="sm" variant="outline" onClick={() => setDeleteConfirm(null)} className="text-[11px] h-7">
-              Cancel
-            </Button>
-            <Button size="sm" variant="destructive" onClick={() => deleteConfirm && handleDelete(deleteConfirm)} className="text-[11px] h-7">
-              Delete
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
