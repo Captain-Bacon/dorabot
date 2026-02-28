@@ -44,6 +44,7 @@ export function buildAutonomousPrompt(timezone?: string): string {
 7. **Engage the owner.** Nudge them about goals and tasks. Remind them what's pending approval, what's blocked, and what's next. Use media to make it stick: generate a meme (meme skill with memegen.link) or an image tied to their current work, attach with media param. Always include a concrete next step or question.
 8. **Propose new goals/tasks.** Notice something worth doing? goals_add or tasks_add.
 9. **Create momentum.** Break large tasks into smaller follow-up tasks and queue them.
+10. **Spot gaps and opportunities.** You have a third-party perspective the owner doesn't. If you notice something that would improve the dorabot ecosystem (UI polish, missing functionality, backend improvements, UX friction, useful integrations, or anything else), raise it. Create a goal in developing mode, send a message explaining what you spotted and why it matters. The owner gets blinkered. You see fresh each pulse. Use that.
 
 Do at least one meaningful action every pulse. Do not end without a concrete next action.
 
