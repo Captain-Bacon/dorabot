@@ -30,12 +30,12 @@ const structureL0: Diagram = {
   lens: 'structure',
   title: 'System Overview',
   mermaid: `flowchart TD
-    GW["🔌 Gateway\\nCore Process\\nManages sessions, agents, events"]
-    CH["📡 Channels\\nMessaging Bridges\\nTelegram, WhatsApp, Desktop"]
-    AG["🤖 Agents\\nClaude SDK\\nBuilt-in + custom agent definitions"]
-    TL["🔧 Tools\\nMCP + Custom\\nMessaging, handoff, libraries, search"]
-    ST["💾 Storage\\nSQLite + Files\\nSessions, goals, tasks, research"]
-    CF["⚙️ Config\\nJSON + Env\\nChannels, agents, permissions"]
+    GW["🔌 Gateway<br/>Core Process<br/>Manages sessions, agents, events"]
+    CH["📡 Channels<br/>Messaging Bridges<br/>Telegram, WhatsApp, Desktop"]
+    AG["🤖 Agents<br/>Claude SDK<br/>Built-in + custom agent definitions"]
+    TL["🔧 Tools<br/>MCP + Custom<br/>Messaging, handoff, libraries, search"]
+    ST["💾 Storage<br/>SQLite + Files<br/>Sessions, goals, tasks, research"]
+    CF["⚙️ Config<br/>JSON + Env<br/>Channels, agents, permissions"]
 
     CH -->|inbound messages| GW
     GW -->|dispatches to| AG
@@ -59,12 +59,12 @@ const structureGateway: Diagram = {
   title: 'Gateway Internals',
   parentId: 'structure-l0',
   mermaid: `flowchart TD
-    SM["🔑 Session Manager\\nSessionRegistry\\nCreates, tracks, clears sessions"]
-    RPC["📬 RPC Handler\\nJSON-RPC over WS\\nDesktop commands + tool results"]
-    EB["📢 Event Bus\\nBroadcaster\\nPushes events to all connected clients"]
-    AR["🏃 Agent Runner\\nSDK Orchestrator\\nSpawns Claude, manages turns + tools"]
-    TR["🎯 Tool Registry\\nCustom + MCP\\nRegisters tools, resolves permissions"]
-    CTX["📊 Context Tracker\\nUsage Maps\\nToken counting + threshold warnings"]
+    SM["🔑 Session Manager<br/>SessionRegistry<br/>Creates, tracks, clears sessions"]
+    RPC["📬 RPC Handler<br/>JSON-RPC over WS<br/>Desktop commands + tool results"]
+    EB["📢 Event Bus<br/>Broadcaster<br/>Pushes events to all connected clients"]
+    AR["🏃 Agent Runner<br/>SDK Orchestrator<br/>Spawns Claude, manages turns + tools"]
+    TR["🎯 Tool Registry<br/>Custom + MCP<br/>Registers tools, resolves permissions"]
+    CTX["📊 Context Tracker<br/>Usage Maps<br/>Token counting + threshold warnings"]
 
     RPC -->|creates/queries| SM
     RPC -->|triggers| AR
@@ -88,11 +88,11 @@ const structureChannels: Diagram = {
   title: 'Channel Architecture',
   parentId: 'structure-l0',
   mermaid: `flowchart TD
-    TG["📱 Telegram Monitor\\nBot API\\nPolls updates, handles commands"]
-    WA["💬 WhatsApp Monitor\\nBaileys Client\\nListens for messages + media"]
-    DT["🖥️ Desktop WebSocket\\nElectron Bridge\\nDirect RPC + event streaming"]
-    HR["🔗 Handler Registry\\nChannel Router\\nMaps channels to send/receive handlers"]
-    RR["↩️ Reply Refs\\nCross-Channel Links\\nTracks which messages link to which sessions"]
+    TG["📱 Telegram Monitor<br/>Bot API<br/>Polls updates, handles commands"]
+    WA["💬 WhatsApp Monitor<br/>Baileys Client<br/>Listens for messages + media"]
+    DT["🖥️ Desktop WebSocket<br/>Electron Bridge<br/>Direct RPC + event streaming"]
+    HR["🔗 Handler Registry<br/>Channel Router<br/>Maps channels to send/receive handlers"]
+    RR["↩️ Reply Refs<br/>Cross-Channel Links<br/>Tracks which messages link to which sessions"]
 
     TG -->|registers handler| HR
     WA -->|registers handler| HR
@@ -114,11 +114,11 @@ const structureAgents: Diagram = {
   title: 'Agent System',
   parentId: 'structure-l0',
   mermaid: `flowchart TD
-    SDK["🧠 Claude SDK\\nAnthropic Agent\\nManages conversation, tool calls, turns"]
-    BI["📦 Built-in Agents\\n8 Definitions\\nExplore, Plan, Bash, Librarian, etc."]
-    CU["✏️ Custom Agents\\nUser-Created\\nStored in config, full CRUD"]
-    DA["🚫 Disabled Filter\\ngetAllAgents\\nFilters out disabled before SDK sees them"]
-    SP["💬 System Prompt\\nDynamic Builder\\nContext, memory, goals, usage injected"]
+    SDK["🧠 Claude SDK<br/>Anthropic Agent<br/>Manages conversation, tool calls, turns"]
+    BI["📦 Built-in Agents<br/>8 Definitions<br/>Explore, Plan, Bash, Librarian, etc."]
+    CU["✏️ Custom Agents<br/>User-Created<br/>Stored in config, full CRUD"]
+    DA["🚫 Disabled Filter<br/>getAllAgents<br/>Filters out disabled before SDK sees them"]
+    SP["💬 System Prompt<br/>Dynamic Builder<br/>Context, memory, goals, usage injected"]
 
     BI -->|merged with| CU
     CU -->|filtered by| DA
@@ -139,12 +139,12 @@ const structureTools: Diagram = {
   title: 'Tool System',
   parentId: 'structure-l0',
   mermaid: `flowchart TD
-    MSG["✉️ Messaging Tool\\nCross-Channel\\nSend, edit, delete messages"]
-    HO["📋 Handoff Tool\\nContext Preservation\\nWrites handoff docs, updates memory"]
-    LIB["📚 Library Tools\\nKnowledge Search\\nAdd, search, reindex, remove libraries"]
-    SCH["📅 Scheduler Tools\\nCalendar/Reminders\\nCreate, list, update, cancel schedules"]
-    GT["🎯 Goals + Tasks\\nPlanning Pipeline\\nCRUD for goals, tasks, research"]
-    BR["🌐 Browser Tool\\nPlaywright\\nNavigation, clicks, screenshots"]
+    MSG["✉️ Messaging Tool<br/>Cross-Channel<br/>Send, edit, delete messages"]
+    HO["📋 Handoff Tool<br/>Context Preservation<br/>Writes handoff docs, updates memory"]
+    LIB["📚 Library Tools<br/>Knowledge Search<br/>Add, search, reindex, remove libraries"]
+    SCH["📅 Scheduler Tools<br/>Calendar/Reminders<br/>Create, list, update, cancel schedules"]
+    GT["🎯 Goals + Tasks<br/>Planning Pipeline<br/>CRUD for goals, tasks, research"]
+    BR["🌐 Browser Tool<br/>Playwright<br/>Navigation, clicks, screenshots"]
 
     MSG -->|uses channel registry| LIB
     HO -->|writes to| GT
@@ -168,12 +168,12 @@ const timeL0: Diagram = {
   lens: 'time',
   title: 'Message Lifecycle',
   mermaid: `flowchart TD
-    U["👤 User\\nSends Message\\nTelegram, WhatsApp, or Desktop"]
-    CH["📡 Channel\\nReceives + Validates\\nTranscribes voice, checks permissions"]
-    GW["🔌 Gateway\\nRoutes Message\\nFinds or creates session"]
-    AG["🤖 Agent\\nProcesses + Responds\\nMultiple tool-call turns possible"]
-    TL["🔧 Tools\\nExecutes Actions\\nMessages, searches, file ops"]
-    RS["💬 Response\\nDelivered to User\\nVia same or different channel"]
+    U["👤 User<br/>Sends Message<br/>Telegram, WhatsApp, or Desktop"]
+    CH["📡 Channel<br/>Receives + Validates<br/>Transcribes voice, checks permissions"]
+    GW["🔌 Gateway<br/>Routes Message<br/>Finds or creates session"]
+    AG["🤖 Agent<br/>Processes + Responds<br/>Multiple tool-call turns possible"]
+    TL["🔧 Tools<br/>Executes Actions<br/>Messages, searches, file ops"]
+    RS["💬 Response<br/>Delivered to User<br/>Via same or different channel"]
 
     U -->|types/speaks| CH
     CH -->|inbound message| GW
@@ -197,12 +197,12 @@ const timeInbound: Diagram = {
   title: 'Inbound Message Flow',
   parentId: 'time-l0',
   mermaid: `flowchart TD
-    RCV["📨 Channel Receives\\nRaw Message\\nText, voice, media, commands"]
-    CMD{"🔍 Is Command?\\n/clear /handoff /reset\\nHandled immediately, no agent"}
-    TR["🎤 Transcription\\nVoice to Text\\nParakeet-MLX or Whisper"]
-    SL["🔑 Session Lookup\\nFind or Create\\nBy channel + chatId + replyRefs"]
-    CTX["📝 Context Build\\nSystem Prompt\\nMemory, goals, usage injected"]
-    DSP["🚀 Dispatch\\nAgent Runner\\nStarts SDK with session context"]
+    RCV["📨 Channel Receives<br/>Raw Message<br/>Text, voice, media, commands"]
+    CMD{"🔍 Is Command?<br/>/clear /handoff /reset<br/>Handled immediately, no agent"}
+    TR["🎤 Transcription<br/>Voice to Text<br/>Parakeet-MLX or Whisper"]
+    SL["🔑 Session Lookup<br/>Find or Create<br/>By channel + chatId + replyRefs"]
+    CTX["📝 Context Build<br/>System Prompt<br/>Memory, goals, usage injected"]
+    DSP["🚀 Dispatch<br/>Agent Runner<br/>Starts SDK with session context"]
 
     RCV -->|check| CMD
     CMD -->|yes: handle + return| RCV
@@ -226,12 +226,12 @@ const timeOutbound: Diagram = {
   title: 'Outbound Message Flow',
   parentId: 'time-l0',
   mermaid: `flowchart TD
-    AG["🤖 Agent Turn\\nProcessing\\nText generation or tool call"]
-    TC{"🔧 Tool Call?\\nAgent wants action\\nMessage, search, file op, etc."}
-    EX["⚡ Tool Execute\\nRuns Action\\nResult returned to agent"]
-    RR["📌 Reply Ref\\nRegisters Link\\nMaps sent messageId to session"]
-    TX["💬 Text Response\\nFinal Output\\nStreamed to desktop, sent to chat"]
-    EV["📢 Events\\nBroadcast\\ncontext.updated, agent.result, etc."]
+    AG["🤖 Agent Turn<br/>Processing<br/>Text generation or tool call"]
+    TC{"🔧 Tool Call?<br/>Agent wants action<br/>Message, search, file op, etc."}
+    EX["⚡ Tool Execute<br/>Runs Action<br/>Result returned to agent"]
+    RR["📌 Reply Ref<br/>Registers Link<br/>Maps sent messageId to session"]
+    TX["💬 Text Response<br/>Final Output<br/>Streamed to desktop, sent to chat"]
+    EV["📢 Events<br/>Broadcast<br/>context.updated, agent.result, etc."]
 
     AG -->|check| TC
     TC -->|yes| EX
@@ -255,12 +255,12 @@ const timeCrossChannel: Diagram = {
   title: 'Cross-Channel Reply Routing',
   parentId: 'time-l0',
   mermaid: `flowchart TD
-    DT["🖥️ Desktop Session\\nUser Asks Agent\\nAgent decides to message via Telegram"]
-    MS["✉️ Message Tool\\nSends to Telegram\\nReturns messageId"]
-    RR["📌 Reply Ref Created\\nLinks messageId\\nMaps Telegram msg to desktop session"]
-    UR["👤 User Replies\\nIn Telegram\\nReply-to the agent's message"]
-    LK["🔍 Ref Lookup\\nresolveLinkedRunSession\\nFinds original desktop session"]
-    INJ["💉 Inject\\nhandle.inject\\nReply arrives in desktop session context"]
+    DT["🖥️ Desktop Session<br/>User Asks Agent<br/>Agent decides to message via Telegram"]
+    MS["✉️ Message Tool<br/>Sends to Telegram<br/>Returns messageId"]
+    RR["📌 Reply Ref Created<br/>Links messageId<br/>Maps Telegram msg to desktop session"]
+    UR["👤 User Replies<br/>In Telegram<br/>Reply-to the agent's message"]
+    LK["🔍 Ref Lookup<br/>resolveLinkedRunSession<br/>Finds original desktop session"]
+    INJ["💉 Inject<br/>handle.inject<br/>Reply arrives in desktop session context"]
 
     DT -->|agent calls| MS
     MS -->|registers| RR
@@ -286,12 +286,12 @@ const logicL0: Diagram = {
   lens: 'logic',
   title: 'Message Routing Decisions',
   mermaid: `flowchart TD
-    MSG["📨 Incoming Message\\nFrom any channel\\nText, voice, or media"]
-    CMD{"🔍 Is Command?\\n/clear /handoff /reset\\nDirect handling, no agent"}
-    SES{"🔑 Session Exists?\\nLookup by key\\nOr create new one"}
-    PRM{"🔒 Permissions OK?\\nChannel policy\\nTool allow/deny lists"}
-    AGS["🤖 Agent Selection\\nSDK Routes\\nModel + tools by agent definition"]
-    RUN["🏃 Execute\\nAgent Run\\nTurns until complete or error"]
+    MSG["📨 Incoming Message<br/>From any channel<br/>Text, voice, or media"]
+    CMD{"🔍 Is Command?<br/>/clear /handoff /reset<br/>Direct handling, no agent"}
+    SES{"🔑 Session Exists?<br/>Lookup by key<br/>Or create new one"}
+    PRM{"🔒 Permissions OK?<br/>Channel policy<br/>Tool allow/deny lists"}
+    AGS["🤖 Agent Selection<br/>SDK Routes<br/>Model + tools by agent definition"]
+    RUN["🏃 Execute<br/>Agent Run<br/>Turns until complete or error"]
 
     MSG --> CMD
     CMD -->|yes: handle locally| MSG
@@ -316,12 +316,12 @@ const logicCommands: Diagram = {
   title: 'Command Handling',
   parentId: 'logic-l0',
   mermaid: `flowchart TD
-    IN["📨 Message Text\\nFirst word check\\nStarts with / ?"]
-    CLR{"/clear or /reset\\nReset Session\\nClears SDK context, keeps DB history"}
-    HO{"/handoff\\nPreserve + Clear\\nAgent writes handoff doc, then auto-clears"}
-    BLK{"🚫 Agent Running?\\nBlocked\\nCan't clear during active run"}
-    OK["✅ Session Cleared\\nFresh Start\\nsdkSessionId reset, maps cleared"]
-    HD["📋 Handoff Pending\\nAgent Writes Doc\\nAuto-clear on completion"]
+    IN["📨 Message Text<br/>First word check<br/>Starts with / ?"]
+    CLR{"/clear or /reset<br/>Reset Session<br/>Clears SDK context, keeps DB history"}
+    HO{"/handoff<br/>Preserve + Clear<br/>Agent writes handoff doc, then auto-clears"}
+    BLK{"🚫 Agent Running?<br/>Blocked<br/>Can't clear during active run"}
+    OK["✅ Session Cleared<br/>Fresh Start<br/>sdkSessionId reset, maps cleared"]
+    HD["📋 Handoff Pending<br/>Agent Writes Doc<br/>Auto-clear on completion"]
 
     IN --> CLR
     IN --> HO
@@ -345,12 +345,12 @@ const logicPermissions: Diagram = {
   title: 'Permission System',
   parentId: 'logic-l0',
   mermaid: `flowchart TD
-    TC["🔧 Tool Call\\nAgent wants to use tool\\nclassifyToolCall() runs"]
-    PM{"📋 Permission Mode\\nacceptEdits?\\nAuto-allows Write/Edit tools"}
-    CP{"📡 Channel Policy\\ntools.allow list\\nDoes channel explicitly allow this tool?"}
-    TP{"🔒 Tool Policy\\nDefault classification\\nHardcoded safe/dangerous lists"}
-    AA["✅ Auto-Allow\\nNo approval needed\\nTool executes immediately"]
-    RA["⚠️ Require Approval\\nDesktop prompt\\nUser must click approve/deny"]
+    TC["🔧 Tool Call<br/>Agent wants to use tool<br/>classifyToolCall() runs"]
+    PM{"📋 Permission Mode<br/>acceptEdits?<br/>Auto-allows Write/Edit tools"}
+    CP{"📡 Channel Policy<br/>tools.allow list<br/>Does channel explicitly allow this tool?"}
+    TP{"🔒 Tool Policy<br/>Default classification<br/>Hardcoded safe/dangerous lists"}
+    AA["✅ Auto-Allow<br/>No approval needed<br/>Tool executes immediately"]
+    RA["⚠️ Require Approval<br/>Desktop prompt<br/>User must click approve/deny"]
 
     TC --> PM
     PM -->|write/edit tool| AA
@@ -375,12 +375,12 @@ const logicAgentSelection: Diagram = {
   title: 'Agent Selection & Routing',
   parentId: 'logic-l0',
   mermaid: `flowchart TD
-    IN["📨 Message Arrives\\nWith session context\\nReady for agent"]
-    DEF["📦 Load Definitions\\ngetAllAgents()\\nBuilt-in + custom, minus disabled"]
-    SDK["🧠 SDK Decision\\nClaude Chooses\\nBased on message + available agents"]
-    MOD["🎯 Model Assignment\\nPer Agent\\nHaiku, Sonnet, Opus, or inherit"]
-    TLS["🔧 Tool Scoping\\nPer Agent\\nOnly tools listed in agent definition"]
-    RUN["🏃 Agent Executes\\nWith scoped tools\\nMultiple turns until complete"]
+    IN["📨 Message Arrives<br/>With session context<br/>Ready for agent"]
+    DEF["📦 Load Definitions<br/>getAllAgents()<br/>Built-in + custom, minus disabled"]
+    SDK["🧠 SDK Decision<br/>Claude Chooses<br/>Based on message + available agents"]
+    MOD["🎯 Model Assignment<br/>Per Agent<br/>Haiku, Sonnet, Opus, or inherit"]
+    TLS["🔧 Tool Scoping<br/>Per Agent<br/>Only tools listed in agent definition"]
+    RUN["🏃 Agent Executes<br/>With scoped tools<br/>Multiple turns until complete"]
 
     IN --> DEF
     DEF --> SDK
@@ -406,11 +406,11 @@ const stateL0: Diagram = {
   lens: 'state',
   title: 'Key Entity Lifecycles',
   mermaid: `flowchart TD
-    SE["🔑 Session\\nConversation Thread\\nCreated -> Active -> Cleared"]
-    CX["📊 Context Window\\nToken Budget\\nEmpty -> Filling -> Warning -> Full"]
-    TA["📋 Task\\nWork Item\\nPlanning -> Planned -> Approved -> Done"]
-    GO["🎯 Goal\\nHigh-Level Outcome\\nActive -> Paused -> Done"]
-    AG["🤖 Agent Run\\nSingle Execution\\nStarted -> Running -> Complete/Error"]
+    SE["🔑 Session<br/>Conversation Thread<br/>Created -> Active -> Cleared"]
+    CX["📊 Context Window<br/>Token Budget<br/>Empty -> Filling -> Warning -> Full"]
+    TA["📋 Task<br/>Work Item<br/>Planning -> Planned -> Approved -> Done"]
+    GO["🎯 Goal<br/>High-Level Outcome<br/>Active -> Paused -> Done"]
+    AG["🤖 Agent Run<br/>Single Execution<br/>Started -> Running -> Complete/Error"]
 
     SE -->|accumulates| CX
     GO -->|decomposes into| TA
@@ -431,12 +431,12 @@ const stateSession: Diagram = {
   title: 'Session Lifecycle',
   parentId: 'state-l0',
   mermaid: `flowchart TD
-    NEW["🆕 Created\\nFirst Message\\nsdkSessionId assigned"]
-    ACT["💬 Active\\nMessages Flowing\\nContext accumulating each turn"]
-    IDLE["😴 Idle\\nNo Recent Activity\\nSession preserved in registry"]
-    HO["📋 Handoff\\nContext Preserved\\nRich doc written to workspace"]
-    CLR["🧹 Cleared\\nFresh Context\\nsdkSessionId reset, DB history kept"]
-    GONE["💀 Expired\\nRegistry Eviction\\nOldest sessions removed at capacity"]
+    NEW["🆕 Created<br/>First Message<br/>sdkSessionId assigned"]
+    ACT["💬 Active<br/>Messages Flowing<br/>Context accumulating each turn"]
+    IDLE["😴 Idle<br/>No Recent Activity<br/>Session preserved in registry"]
+    HO["📋 Handoff<br/>Context Preserved<br/>Rich doc written to workspace"]
+    CLR["🧹 Cleared<br/>Fresh Context<br/>sdkSessionId reset, DB history kept"]
+    GONE["💀 Expired<br/>Registry Eviction<br/>Oldest sessions removed at capacity"]
 
     NEW -->|user sends message| ACT
     ACT -->|time passes| IDLE
@@ -462,12 +462,12 @@ const stateContext: Diagram = {
   title: 'Context Window States',
   parentId: 'state-l0',
   mermaid: `flowchart TD
-    E["🟢 Empty\\n0%\\nFresh session, full budget"]
-    L["🔵 Low\\n1-49%\\nNormal operation"]
-    M["🟡 Medium\\n50-69%\\nINFO warnings start"]
-    H["🟠 High\\n70-84%\\nConsider handoff"]
-    C["🔴 Critical\\n85-94%\\nStrongly recommend handoff"]
-    U["🚨 Urgent\\n95%+\\nHandoff immediately or fail"]
+    E["🟢 Empty<br/>0%<br/>Fresh session, full budget"]
+    L["🔵 Low<br/>1-49%<br/>Normal operation"]
+    M["🟡 Medium<br/>50-69%<br/>INFO warnings start"]
+    H["🟠 High<br/>70-84%<br/>Consider handoff"]
+    C["🔴 Critical<br/>85-94%<br/>Strongly recommend handoff"]
+    U["🚨 Urgent<br/>95%+<br/>Handoff immediately or fail"]
 
     E -->|messages accumulate| L
     L -->|more turns| M
@@ -491,12 +491,12 @@ const stateTask: Diagram = {
   title: 'Task Lifecycle',
   parentId: 'state-l0',
   mermaid: `flowchart TD
-    PL["📝 Planning\\nDrafting Plan\\nAgent researches + writes approach"]
-    PD["📋 Planned\\nAwaiting Review\\nPlan written, submitted for approval"]
-    DN{"👤 Human Decision\\nApprove or Deny\\nReads plan, checks approach"}
-    IP["🏃 In Progress\\nExecuting\\nAgent working on implementation"]
-    DO["✅ Done\\nComplete\\nObjective met, result recorded"]
-    BL["🚫 Blocked\\nCan't Proceed\\nDependency or issue"]
+    PL["📝 Planning<br/>Drafting Plan<br/>Agent researches + writes approach"]
+    PD["📋 Planned<br/>Awaiting Review<br/>Plan written, submitted for approval"]
+    DN{"👤 Human Decision<br/>Approve or Deny<br/>Reads plan, checks approach"}
+    IP["🏃 In Progress<br/>Executing<br/>Agent working on implementation"]
+    DO["✅ Done<br/>Complete<br/>Objective met, result recorded"]
+    BL["🚫 Blocked<br/>Can't Proceed<br/>Dependency or issue"]
 
     PL -->|plan written| PD
     PD -->|human reviews| DN
@@ -521,10 +521,10 @@ const stateGoal: Diagram = {
   title: 'Goal Lifecycle',
   parentId: 'state-l0',
   mermaid: `flowchart TD
-    CR["🆕 Created\\nGoal Defined\\nTitle + description set"]
-    AC["🎯 Active\\nWork In Progress\\nTasks being planned and executed"]
-    PA["⏸️ Paused\\nDeprioritized\\nNo active work, preserved"]
-    DO["✅ Done\\nObjective Met\\nAll tasks complete"]
+    CR["🆕 Created<br/>Goal Defined<br/>Title + description set"]
+    AC["🎯 Active<br/>Work In Progress<br/>Tasks being planned and executed"]
+    PA["⏸️ Paused<br/>Deprioritized<br/>No active work, preserved"]
+    DO["✅ Done<br/>Objective Met<br/>All tasks complete"]
 
     CR -->|work begins| AC
     AC -->|deprioritize| PA
