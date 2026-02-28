@@ -408,8 +408,8 @@ const stateL0: Diagram = {
   mermaid: `flowchart TD
     SE["🔑 Session<br/>Conversation Thread<br/>Created -> Active -> Cleared"]
     CX["📊 Context Window<br/>Token Budget<br/>Empty -> Filling -> Warning -> Full"]
-    TA["📋 Task<br/>Work Item<br/>Planning -> Planned -> Approved -> Done"]
-    GO["🎯 Goal<br/>High-Level Outcome<br/>Active -> Paused -> Done"]
+    TA["📋 Task<br/>Work Item<br/>Draft -> Reviewed -> Approved -> Running -> Done"]
+    GO["🎯 Goal<br/>High-Level Outcome<br/>Holding -> Developing -> Active -> Done"]
     AG["🤖 Agent Run<br/>Single Execution<br/>Started -> Running -> Complete/Error"]
 
     SE -->|accumulates| CX
@@ -491,25 +491,32 @@ const stateTask: Diagram = {
   title: 'Task Lifecycle',
   parentId: 'state-l0',
   mermaid: `flowchart TD
-    PL["📝 Planning<br/>Drafting Plan<br/>Agent researches + writes approach"]
-    PD["📋 Planned<br/>Awaiting Review<br/>Plan written, submitted for approval"]
+    DR["📝 Draft<br/>Writing Plan<br/>Agent researches + writes approach"]
+    RV["📋 Reviewed<br/>Awaiting Approval<br/>Plan submitted for human review"]
     DN{"👤 Human Decision<br/>Approve or Deny<br/>Reads plan, checks approach"}
-    IP["🏃 In Progress<br/>Executing<br/>Agent working on implementation"]
+    AP["✔️ Approved<br/>Ready for Pickup<br/>Human approved, agent can start"]
+    RU["🏃 Running<br/>Executing<br/>Agent working on implementation"]
+    CK["🔍 Checking<br/>Verification (opt-in)<br/>Different agent verifies output"]
     DO["✅ Done<br/>Complete<br/>Objective met, result recorded"]
     BL["🚫 Blocked<br/>Can't Proceed<br/>Dependency or issue"]
 
-    PL -->|plan written| PD
-    PD -->|human reviews| DN
-    DN -->|approved| IP
-    DN -->|denied with reason| PL
-    IP -->|finished| DO
-    IP -->|stuck| BL
-    BL -->|resolved| IP`,
+    DR -->|plan written| RV
+    RV -->|human reviews| DN
+    DN -->|approved| AP
+    DN -->|denied with reason| DR
+    AP -->|agent starts| RU
+    RU -->|needs verification| CK
+    RU -->|finished| DO
+    CK -->|verified| DO
+    RU -->|stuck| BL
+    BL -->|resolved| RU`,
   nodes: [
-    { id: 'PL', label: 'Planning' },
-    { id: 'PD', label: 'Planned' },
+    { id: 'DR', label: 'Draft' },
+    { id: 'RV', label: 'Reviewed' },
     { id: 'DN', label: 'Human Decision' },
-    { id: 'IP', label: 'In Progress' },
+    { id: 'AP', label: 'Approved' },
+    { id: 'RU', label: 'Running' },
+    { id: 'CK', label: 'Checking' },
     { id: 'DO', label: 'Done' },
     { id: 'BL', label: 'Blocked' },
   ],
@@ -521,20 +528,24 @@ const stateGoal: Diagram = {
   title: 'Goal Lifecycle',
   parentId: 'state-l0',
   mermaid: `flowchart TD
-    CR["🆕 Created<br/>Goal Defined<br/>Title + description set"]
-    AC["🎯 Active<br/>Work In Progress<br/>Tasks being planned and executed"]
-    PA["⏸️ Paused<br/>Deprioritized<br/>No active work, preserved"]
-    DO["✅ Done<br/>Objective Met<br/>All tasks complete"]
+    HO["💤 Holding<br/>Not Started<br/>User thinking, agent hands off"]
+    DV["🔬 Developing<br/>Exploring<br/>Agent researches, suggests, challenges"]
+    AC["🎯 Active<br/>Executing<br/>Approved tasks running"]
+    CK["🔍 Checking<br/>Verifying<br/>Different agent checks against intent"]
+    DO["✅ Done<br/>Objective Met<br/>Verified complete"]
 
-    CR -->|work begins| AC
-    AC -->|deprioritize| PA
-    PA -->|reprioritize| AC
-    AC -->|all tasks done| DO
-    DO -->|reopened| AC`,
+    HO -->|user ready| DV
+    DV -->|tasks approved| AC
+    AC -->|work complete| CK
+    CK -->|verified| DO
+    CK -->|issues found| AC
+    AC -->|deprioritize| HO
+    DO -->|reopened| DV`,
   nodes: [
-    { id: 'CR', label: 'Created' },
+    { id: 'HO', label: 'Holding' },
+    { id: 'DV', label: 'Developing' },
     { id: 'AC', label: 'Active' },
-    { id: 'PA', label: 'Paused' },
+    { id: 'CK', label: 'Checking' },
     { id: 'DO', label: 'Done' },
   ],
 };
