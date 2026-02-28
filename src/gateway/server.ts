@@ -1648,6 +1648,27 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
     broadcast,
   };
 
+  // On startup, generate approvalRequestIds for any planned tasks missing them.
+  // This catches tasks set to 'planned' by MCP tools if the gateway restarted
+  // before the post-turn hook could run requestPendingTaskApprovals.
+  {
+    const startupTasks = loadTasks();
+    let patched = false;
+    for (const task of startupTasks.tasks) {
+      if (task.status === 'planned' && !task.approvalRequestId && !task.approvedAt) {
+        task.approvalRequestId = randomUUID();
+        task.updatedAt = new Date().toISOString();
+        appendTaskLog(task.id, 'approval_requested', 'Waiting for human approval (startup recovery)');
+        patched = true;
+      }
+    }
+    if (patched) {
+      saveTasks(startupTasks);
+      broadcast({ event: 'goals.update', data: {} });
+      console.log('[gateway] recovered pending task approvals on startup');
+    }
+  }
+
   // pending AskUserQuestion requests waiting for desktop answers
   const pendingQuestions = new Map<string, {
     resolve: (answers: Record<string, string>) => void;

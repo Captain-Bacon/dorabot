@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { getDb } from '../db.js';
@@ -113,6 +114,14 @@ function normalizeStatusForApproval(task: Task, requested: TaskStatus): TaskStat
     return 'planned';
   }
   return requested;
+}
+
+/** Generate an approvalRequestId when a task transitions to planned (if it doesn't already have one). */
+function ensureApprovalRequest(task: Task): void {
+  if (task.status === 'planned' && !task.approvalRequestId && !task.approvedAt) {
+    task.approvalRequestId = randomUUID();
+    appendTaskLog(task.id, 'approval_requested', 'Waiting for human approval');
+  }
 }
 
 function parseTaskRow(raw: string): Task {
@@ -311,6 +320,7 @@ export const tasksAddTool = tool(
     };
     task.planDocPath = ensureTaskPlanDoc(task, args.plan);
     task.plan = readTaskPlanDoc(task);
+    ensureApprovalRequest(task);
     state.tasks.push(task);
     saveTasks(state);
     appendTaskLog(task.id, 'task_add', `Task created: ${task.title}`);
@@ -359,6 +369,7 @@ export const tasksUpdateTool = tool(
     if (task.status === 'done' && !task.completedAt) task.completedAt = task.updatedAt;
     if (task.status !== 'done') task.completedAt = undefined;
     if (task.status !== 'planned') task.approvalRequestId = undefined;
+    ensureApprovalRequest(task);
     saveTasks(state);
 
     const changes: string[] = [];
@@ -387,6 +398,7 @@ export const tasksDoneTool = tool(
       if (args.result !== undefined) task.result = args.result;
       task.updatedAt = now;
       task.completedAt = undefined;
+      ensureApprovalRequest(task);
       saveTasks(state);
       appendTaskLog(task.id, 'task_done_blocked', 'Task attempted done before approval, moved to planned');
       return { content: [{ type: 'text', text: `Task #${task.id} moved to planned for human approval` }] };
