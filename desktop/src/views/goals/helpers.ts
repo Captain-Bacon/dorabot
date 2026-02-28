@@ -1,7 +1,7 @@
 import type { TaskRun } from '../../hooks/useGateway';
 
-export type GoalStatus = 'active' | 'paused' | 'done';
-export type TaskStatus = 'planning' | 'planned' | 'in_progress' | 'done' | 'blocked' | 'cancelled';
+export type GoalStatus = 'holding' | 'developing' | 'active' | 'checking' | 'done';
+export type TaskStatus = 'draft' | 'reviewed' | 'approved' | 'running' | 'checking' | 'done' | 'blocked' | 'cancelled';
 
 export type Goal = {
   id: string;
@@ -47,21 +47,23 @@ export type TaskPresentation = {
 };
 
 const STATUS_ORDER: Record<TaskStatus, number> = {
-  in_progress: 0,
+  running: 0,
   blocked: 1,
-  planning: 2,
-  planned: 3,
-  done: 4,
-  cancelled: 5,
+  checking: 2,
+  draft: 3,
+  reviewed: 4,
+  approved: 5,
+  done: 6,
+  cancelled: 7,
 };
 
 export function getTaskPresentation(
   task: Task,
   taskRuns: Record<string, TaskRun>,
 ): TaskPresentation {
-  const running = taskRuns[task.id]?.status === 'started';
+  const isRunning = taskRuns[task.id]?.status === 'started';
 
-  if (running || task.status === 'in_progress') {
+  if (isRunning || task.status === 'running') {
     return {
       label: 'running',
       dotClass: 'bg-foreground animate-pulse',
@@ -69,7 +71,7 @@ export function getTaskPresentation(
     };
   }
 
-  if (task.status === 'planned') {
+  if (task.status === 'reviewed') {
     if (task.approvalRequestId) {
       return { label: 'waiting for approval', dotClass: 'bg-amber-500', action: 'approve' };
     }
@@ -77,17 +79,25 @@ export function getTaskPresentation(
       return { label: 'needs revision', dotClass: 'bg-destructive', action: null };
     }
     if (task.approvedAt) {
-      return { label: 'ready to start', dotClass: 'bg-emerald-500', action: 'start' };
+      return { label: 'approved', dotClass: 'bg-emerald-500', action: 'start' };
     }
-    return { label: 'planned', dotClass: 'bg-violet-500/40', action: null };
+    return { label: 'reviewed', dotClass: 'bg-violet-500/40', action: null };
+  }
+
+  if (task.status === 'approved') {
+    return { label: 'approved', dotClass: 'bg-emerald-500', action: 'start' };
+  }
+
+  if (task.status === 'checking') {
+    return { label: 'checking', dotClass: 'bg-amber-500 animate-pulse', action: null };
   }
 
   if (task.status === 'blocked') {
     return { label: 'blocked', dotClass: 'bg-destructive', action: 'unblock' };
   }
 
-  if (task.status === 'planning') {
-    return { label: 'planning', dotClass: 'bg-muted-foreground/20', action: null };
+  if (task.status === 'draft') {
+    return { label: 'draft', dotClass: 'bg-muted-foreground/20', action: null };
   }
 
   if (task.status === 'done') {
@@ -126,13 +136,16 @@ export function getStatusBadge(label: string): { bg: string; text: string } {
     case 'waiting for approval':
     case 'needs approval':
       return { bg: 'bg-amber-500/15', text: 'text-amber-500' };
+    case 'approved':
     case 'ready to start':
     case 'ready':
       return { bg: 'bg-emerald-500/15', text: 'text-emerald-500' };
-    case 'planning':
+    case 'draft':
       return { bg: 'bg-muted', text: 'text-muted-foreground' };
-    case 'planned':
+    case 'reviewed':
       return { bg: 'bg-violet-500/15', text: 'text-violet-500' };
+    case 'checking':
+      return { bg: 'bg-amber-500/15', text: 'text-amber-500' };
     case 'blocked':
       return { bg: 'bg-destructive/15', text: 'text-destructive' };
     case 'needs revision':

@@ -3,7 +3,7 @@ import { Activity, ShieldCheck, Clock3, Pencil, CircleSlash, CheckCircle2, Ban }
 import type { Task } from './helpers';
 import type { TaskRun } from '../../hooks/useGateway';
 
-export type TaskFilter = 'running' | 'pending' | 'ready' | 'planning' | 'blocked' | 'denied' | 'done' | null;
+export type TaskFilter = 'running' | 'pending' | 'ready' | 'draft' | 'blocked' | 'denied' | 'done' | null;
 
 type Props = {
   tasks: Task[];
@@ -22,17 +22,17 @@ type StatItem = {
 
 export function SummaryStrip({ tasks, taskRuns, activeFilter, onFilterChange }: Props) {
   const running = tasks.filter(t =>
-    t.status === 'in_progress' || taskRuns[t.id]?.status === 'started'
+    t.status === 'running' || taskRuns[t.id]?.status === 'started'
   ).length;
   const waiting = tasks.filter(t =>
-    t.status === 'planned' && !t.approvalRequestId && !!t.approvedAt
+    t.status === 'approved' || (t.status === 'reviewed' && !t.approvalRequestId && !!t.approvedAt)
   ).length;
-  const planning = tasks.filter(t => t.status === 'planning').length;
+  const drafts = tasks.filter(t => t.status === 'draft').length;
   const done = tasks.filter(t => t.status === 'done').length;
   const blocked = tasks.filter(t => t.status === 'blocked').length;
-  const approval = tasks.filter(t => t.status === 'planned' && !!t.approvalRequestId).length;
+  const approval = tasks.filter(t => t.status === 'reviewed' && !!t.approvalRequestId).length;
   const denied = tasks.filter(t =>
-    t.status === 'planned' && !!t.reason && /denied/i.test(t.reason)
+    t.status === 'reviewed' && !!t.reason && /denied/i.test(t.reason)
   ).length;
 
   const items: StatItem[] = [];
@@ -40,7 +40,7 @@ export function SummaryStrip({ tasks, taskRuns, activeFilter, onFilterChange }: 
   if (approval > 0) items.push({ count: approval, label: 'approve', filter: 'pending', icon: <ShieldCheck className="h-3 w-3" />, className: 'text-amber-500' });
   if (waiting > 0) items.push({ count: waiting, label: 'start', filter: 'ready', icon: <Clock3 className="h-3 w-3" />, className: 'text-emerald-500' });
   if (denied > 0) items.push({ count: denied, label: 'revise', filter: 'denied', icon: <Ban className="h-3 w-3" />, className: 'text-destructive' });
-  if (planning > 0) items.push({ count: planning, label: 'planning', filter: 'planning', icon: <Pencil className="h-3 w-3" /> });
+  if (drafts > 0) items.push({ count: drafts, label: 'draft', filter: 'draft', icon: <Pencil className="h-3 w-3" /> });
   if (blocked > 0) items.push({ count: blocked, label: 'blocked', filter: 'blocked', icon: <CircleSlash className="h-3 w-3" />, className: 'text-destructive' });
   if (done > 0) items.push({ count: done, label: 'done', filter: 'done', icon: <CheckCircle2 className="h-3 w-3" /> });
 

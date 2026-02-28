@@ -32,9 +32,9 @@ export function AttentionSection({ tasks, goals, taskRuns, onApprove, onDeny, on
   const [denyReason, setDenyReason] = useState('');
 
   const groups = useMemo(() => {
-    const pending = tasks.filter(t => t.status === 'planned' && !!t.approvalRequestId);
-    const ready = tasks.filter(t => t.status === 'planned' && !t.approvalRequestId && !!t.approvedAt);
-    const denied = tasks.filter(t => t.status === 'planned' && !!t.reason && /denied/i.test(t.reason));
+    const pending = tasks.filter(t => t.status === 'reviewed' && !!t.approvalRequestId);
+    const ready = tasks.filter(t => (t.status === 'approved') || (t.status === 'reviewed' && !t.approvalRequestId && !!t.approvedAt));
+    const denied = tasks.filter(t => t.status === 'reviewed' && !!t.reason && /denied/i.test(t.reason));
     const blocked = tasks.filter(t => t.status === 'blocked');
 
     const result: AttentionGroup[] = [];

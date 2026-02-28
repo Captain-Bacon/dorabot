@@ -50,7 +50,7 @@ export function GoalSection({
 
   const isDismissed = (t: Task) =>
     t.status === 'done' || t.status === 'cancelled' ||
-    (t.status === 'planned' && !!t.reason && /denied/i.test(t.reason));
+    (t.status === 'reviewed' && !!t.reason && /denied/i.test(t.reason));
 
   const activeTasks = filtered ? tasks : tasks.filter(t => !isDismissed(t));
   const dismissedTasks = filtered ? [] : tasks.filter(t => isDismissed(t));
@@ -87,8 +87,14 @@ export function GoalSection({
               open && 'rotate-90',
             )} />
             <span className="text-xs font-medium truncate">{goal.title}</span>
-            {goal.status === 'paused' && (
-              <span className="text-[9px] text-amber-500 shrink-0">paused</span>
+            {goal.status === 'holding' && (
+              <span className="text-[9px] text-amber-500 shrink-0">holding</span>
+            )}
+            {goal.status === 'developing' && (
+              <span className="text-[9px] text-violet-500 shrink-0">developing</span>
+            )}
+            {goal.status === 'checking' && (
+              <span className="text-[9px] text-amber-500 shrink-0">checking</span>
             )}
             {!open && statusChips.length > 0 && (
               <div className="flex items-center gap-1.5 ml-auto shrink-0">
@@ -137,10 +143,10 @@ export function GoalSection({
                 ) : (
                   <>
                     <DropdownMenuItem onClick={() => onToggleGoalStatus(goal)}>
-                      {goal.status === 'paused' ? (
-                        <><Play className="mr-2 h-3.5 w-3.5" /> Resume</>
+                      {goal.status === 'holding' ? (
+                        <><Play className="mr-2 h-3.5 w-3.5" /> Activate</>
                       ) : (
-                        <><Pause className="mr-2 h-3.5 w-3.5" /> Pause</>
+                        <><Pause className="mr-2 h-3.5 w-3.5" /> Hold</>
                       )}
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => onCompleteGoal(goal)}>

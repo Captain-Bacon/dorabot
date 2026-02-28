@@ -1648,14 +1648,14 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
     broadcast,
   };
 
-  // On startup, generate approvalRequestIds for any planned tasks missing them.
-  // This catches tasks set to 'planned' by MCP tools if the gateway restarted
+  // On startup, generate approvalRequestIds for any reviewed tasks missing them.
+  // This catches tasks set to 'reviewed' by MCP tools if the gateway restarted
   // before the post-turn hook could run requestPendingTaskApprovals.
   {
     const startupTasks = loadTasks();
     let patched = false;
     for (const task of startupTasks.tasks) {
-      if (task.status === 'planned' && !task.approvalRequestId && !task.approvedAt) {
+      if (task.status === 'reviewed' && !task.approvalRequestId && !task.approvedAt) {
         task.approvalRequestId = randomUUID();
         task.updatedAt = new Date().toISOString();
         appendTaskLog(task.id, 'approval_requested', 'Waiting for human approval (startup recovery)');
@@ -1829,7 +1829,7 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
     const now = new Date().toISOString();
     ensureTaskPlanDoc(task, task.plan);
     task.plan = readTaskPlanDoc(task);
-    task.status = 'in_progress';
+    task.status = 'running';
     task.reason = undefined;
     task.approvalRequestId = undefined;
     task.sessionKey = sessionKey;
@@ -1841,7 +1841,7 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
     const goal = task.goalId ? goals.goals.find(g => g.id === task.goalId) : undefined;
     const prompt = buildTaskExecutionPrompt(task, goal, mode);
 
-    appendTaskLog(task.id, 'run_started', `Task ${mode === 'plan' ? 'planning' : 'started'}: ${task.title}`, { sessionKey, mode });
+    appendTaskLog(task.id, 'run_started', `Task ${mode === 'plan' ? 'drafting' : 'started'}: ${task.title}`, { sessionKey, mode });
     broadcast({ event: 'goals.update', data: { taskId: task.id, task } });
     broadcast({
       event: 'tasks.log',
@@ -1890,7 +1890,7 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
     if (task.approvalRequestId && task.approvalRequestId !== requestId) return null;
 
     if (!approved) {
-      task.status = 'planned';
+      task.status = 'reviewed';
       task.reason = reason || 'approval denied';
       task.updatedAt = new Date().toISOString();
       task.approvalRequestId = undefined;
@@ -1924,7 +1924,7 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
     const tasks = loadTasks();
     const task = tasks.tasks.find(t => t.id === taskId);
     if (!task) return;
-    if (task.status !== 'planned') return;
+    if (task.status !== 'reviewed') return;
     if (task.approvalRequestId) return;
 
     const requestId = randomUUID();
@@ -1960,7 +1960,7 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
 
   async function requestPendingTaskApprovals(targetChannel?: string, targetChatId?: string, sessionKey?: string): Promise<void> {
     const tasks = loadTasks();
-    const pending = tasks.tasks.filter(task => task.status === 'planned' && !task.approvalRequestId);
+    const pending = tasks.tasks.filter(task => task.status === 'reviewed' && !task.approvalRequestId);
     for (const task of pending) {
       await requestTaskApproval(task.id, targetChannel, targetChatId, sessionKey);
     }
@@ -3858,9 +3858,9 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           const now = new Date().toISOString();
           const ids = tasks.tasks.map(t => Number.parseInt(t.id, 10)).filter(n => Number.isFinite(n));
           const taskId = String((ids.length ? Math.max(...ids) : 0) + 1);
-          const requestedStatus = (params?.status as Task['status']) || 'planning';
-          const normalizedStatus = (requestedStatus === 'in_progress' || requestedStatus === 'done')
-            ? 'planned'
+          const requestedStatus = (params?.status as Task['status']) || 'draft';
+          const normalizedStatus = (requestedStatus === 'running' || requestedStatus === 'done')
+            ? 'reviewed'
             : requestedStatus;
           const task: Task = {
             id: taskId,
@@ -3884,7 +3884,7 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           appendTaskLog(task.id, 'rpc_add', `Task created: ${task.title}`);
           broadcast({ event: 'goals.update', data: { taskId: task.id, task } });
           macNotify('Dora', `Task created: ${task.title}`);
-          if (task.status === 'planned') {
+          if (task.status === 'reviewed') {
             await requestTaskApproval(task.id);
           }
           return { id, result: task };
@@ -3912,8 +3912,8 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
 
           const requestedStatus = params?.status as Task['status'] | undefined;
           if (requestedStatus !== undefined) {
-            if ((requestedStatus === 'in_progress' || requestedStatus === 'done') && !task.approvedAt) {
-              task.status = 'planned';
+            if ((requestedStatus === 'running' || requestedStatus === 'done') && !task.approvedAt) {
+              task.status = 'reviewed';
             } else {
               task.status = requestedStatus;
             }
@@ -3922,7 +3922,7 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           task.updatedAt = new Date().toISOString();
           if (task.status === 'done' && !task.completedAt) task.completedAt = task.updatedAt;
           if (task.status !== 'done') task.completedAt = undefined;
-          if (task.status !== 'planned') task.approvalRequestId = undefined;
+          if (task.status !== 'reviewed') task.approvalRequestId = undefined;
           saveTasks(tasks);
 
           appendTaskLog(task.id, 'rpc_update', `Task updated: ${task.title}`, {
@@ -3932,7 +3932,7 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           broadcast({ event: 'goals.update', data: { taskId: task.id, task } });
           macNotify('Dora', `Task updated: ${task.title}`);
 
-          if (task.status === 'planned') {
+          if (task.status === 'reviewed') {
             await requestTaskApproval(task.id);
           }
 

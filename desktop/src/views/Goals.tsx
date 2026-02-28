@@ -66,12 +66,12 @@ export function GoalsView({ gateway, onViewSession, onSetupChat }: Props) {
   const matchesFilter = useCallback((t: Task): boolean => {
     if (!taskFilter) return true;
     switch (taskFilter) {
-      case 'running': return t.status === 'in_progress' || taskRuns[t.id]?.status === 'started';
-      case 'pending': return t.status === 'planned' && !!t.approvalRequestId;
-      case 'ready': return t.status === 'planned' && !t.approvalRequestId && !!t.approvedAt;
-      case 'planning': return t.status === 'planning';
+      case 'running': return t.status === 'running' || taskRuns[t.id]?.status === 'started';
+      case 'pending': return t.status === 'reviewed' && !!t.approvalRequestId;
+      case 'ready': return t.status === 'approved' || (t.status === 'reviewed' && !t.approvalRequestId && !!t.approvedAt);
+      case 'draft': return t.status === 'draft';
       case 'blocked': return t.status === 'blocked';
-      case 'denied': return t.status === 'planned' && !!t.reason && /denied/i.test(t.reason);
+      case 'denied': return t.status === 'reviewed' && !!t.reason && /denied/i.test(t.reason);
       case 'done': return t.status === 'done';
       default: return true;
     }
@@ -84,9 +84,9 @@ export function GoalsView({ gateway, onViewSession, onSetupChat }: Props) {
       const gTasks = tasks.filter(t => t.goalId === g.id);
       let score = 0;
       for (const t of gTasks) {
-        if (t.status === 'in_progress' || taskRuns[t.id]?.status === 'started') score += 100;
-        if (t.status === 'planned' && t.approvalRequestId) score += 50;
-        if (t.status === 'planned' && !t.approvalRequestId && t.approvedAt) score += 30;
+        if (t.status === 'running' || taskRuns[t.id]?.status === 'started') score += 100;
+        if (t.status === 'reviewed' && t.approvalRequestId) score += 50;
+        if (t.status === 'approved' || (t.status === 'reviewed' && !t.approvalRequestId && t.approvedAt)) score += 30;
         if (t.status === 'blocked') score += 20;
       }
       return score;
@@ -190,7 +190,7 @@ export function GoalsView({ gateway, onViewSession, onSetupChat }: Props) {
 
   const unblockTask = useCallback((taskId: string) => {
     void wrap(`task:${taskId}:status`, async () => {
-      await gateway.rpc('tasks.update', { id: taskId, status: 'planning' });
+      await gateway.rpc('tasks.update', { id: taskId, status: 'draft' });
     });
   }, [gateway, wrap]);
 
@@ -214,7 +214,7 @@ export function GoalsView({ gateway, onViewSession, onSetupChat }: Props) {
   }, [gateway, wrap, selectedTask]);
 
   const toggleGoalStatus = useCallback((goal: Goal) => {
-    const next: GoalStatus = goal.status === 'paused' ? 'active' : 'paused';
+    const next: GoalStatus = goal.status === 'holding' ? 'active' : 'holding';
     void wrap(`goal:${goal.id}`, async () => {
       await gateway.rpc('goals.update', { id: goal.id, status: next });
     });
@@ -262,7 +262,7 @@ Look at this goal holistically. What's the situation? Is the goal actually met? 
 
   const createTask = useCallback((title: string, goalId: string) => {
     void wrap('task:create', async () => {
-      await gateway.rpc('tasks.add', { title, status: 'planning' as TaskStatus, goalId: goalId || undefined });
+      await gateway.rpc('tasks.add', { title, status: 'draft' as TaskStatus, goalId: goalId || undefined });
     });
   }, [gateway, wrap]);
 

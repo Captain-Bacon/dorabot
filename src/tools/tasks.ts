@@ -6,7 +6,16 @@ import { z } from 'zod';
 import { getDb } from '../db.js';
 import { PLANS_DIR } from '../workspace.js';
 
-export type TaskStatus = 'planning' | 'planned' | 'in_progress' | 'done' | 'blocked' | 'cancelled';
+export type TaskStatus = 'draft' | 'reviewed' | 'approved' | 'running' | 'checking' | 'done' | 'blocked' | 'cancelled';
+
+// Backward compat: map old statuses to new
+function migrateTaskStatus(status: string): TaskStatus {
+  if (status === 'planning') return 'draft';
+  if (status === 'planned') return 'reviewed'; // planned tasks were awaiting or past approval
+  if (status === 'in_progress') return 'running';
+  if (['draft', 'reviewed', 'approved', 'running', 'checking', 'done', 'blocked', 'cancelled'].includes(status)) return status as TaskStatus;
+  return 'draft'; // fallback
+}
 
 export type Task = {
   id: string;
@@ -110,15 +119,15 @@ export function getTaskPlanContent(task: Task): string {
 }
 
 function normalizeStatusForApproval(task: Task, requested: TaskStatus): TaskStatus {
-  if ((requested === 'in_progress' || requested === 'done') && !task.approvedAt) {
-    return 'planned';
+  if ((requested === 'running' || requested === 'done') && !task.approvedAt) {
+    return 'reviewed';
   }
   return requested;
 }
 
-/** Generate an approvalRequestId when a task transitions to planned (if it doesn't already have one). */
+/** Generate an approvalRequestId when a task transitions to reviewed (ready for human approval). */
 function ensureApprovalRequest(task: Task): void {
-  if (task.status === 'planned' && !task.approvalRequestId && !task.approvedAt) {
+  if (task.status === 'reviewed' && !task.approvalRequestId && !task.approvedAt) {
     task.approvalRequestId = randomUUID();
     appendTaskLog(task.id, 'approval_requested', 'Waiting for human approval');
   }
@@ -128,7 +137,7 @@ function parseTaskRow(raw: string): Task {
   const task = JSON.parse(raw) as Task;
   return {
     ...task,
-    status: task.status || 'planning',
+    status: migrateTaskStatus(task.status || 'draft'),
     planDocPath: task.planDocPath || getTaskPlanPath(task.id),
   };
 }
@@ -201,10 +210,10 @@ export function readTaskLogs(taskId: string, limit = 50): Array<{
 }
 
 function derivedState(task: Task): string {
-  if (task.status === 'planned') {
+  if (task.status === 'reviewed') {
     if (task.approvalRequestId) return 'needs_approval';
     if (task.reason && /denied/i.test(task.reason)) return 'denied';
-    if (task.approvedAt) return 'ready';
+    if (task.approvedAt) return 'approved';
   }
   return task.status;
 }
@@ -220,9 +229,9 @@ export const tasksViewTool = tool(
   'tasks_view',
   'View tasks. Filter by status (raw), filter (derived state like needs_approval/ready/denied), goalId, or id.',
   {
-    status: z.enum(['all', 'planning', 'planned', 'in_progress', 'done', 'blocked', 'cancelled']).optional(),
-    filter: z.enum(['needs_approval', 'ready', 'denied', 'running', 'active']).optional()
-      .describe('Derived state filter. needs_approval = awaiting human approval, ready = approved but not started, denied = plan was denied, running = in_progress, active = not done/cancelled/denied'),
+    status: z.enum(['all', 'draft', 'reviewed', 'approved', 'running', 'checking', 'done', 'blocked', 'cancelled']).optional(),
+    filter: z.enum(['needs_approval', 'approved', 'denied', 'running', 'active']).optional()
+      .describe('Derived state filter. needs_approval = awaiting human approval, approved = approved and ready to start, denied = plan was denied, running = executing, active = not done/cancelled/denied'),
     goalId: z.string().optional(),
     id: z.string().optional(),
     includeLogs: z.boolean().optional(),
@@ -263,9 +272,9 @@ export const tasksViewTool = tool(
         const ds = derivedState(t);
         switch (args.filter) {
           case 'needs_approval': return ds === 'needs_approval';
-          case 'ready': return ds === 'ready';
+          case 'approved': return ds === 'approved' || t.status === 'approved';
           case 'denied': return ds === 'denied';
-          case 'running': return t.status === 'in_progress';
+          case 'running': return t.status === 'running';
           case 'active': return !DISMISSED.has(t.status) && ds !== 'denied';
           default: return true;
         }
@@ -290,7 +299,7 @@ export const tasksAddTool = tool(
   {
     title: z.string(),
     goalId: z.string().optional(),
-    status: z.enum(['planning', 'planned', 'in_progress', 'done', 'blocked', 'cancelled']).optional(),
+    status: z.enum(['draft', 'reviewed', 'approved', 'running', 'checking', 'done', 'blocked', 'cancelled']).optional(),
     plan: z.string().optional(),
     reason: z.string().optional(),
   },
@@ -298,13 +307,13 @@ export const tasksAddTool = tool(
     const state = loadTasks();
     const now = new Date().toISOString();
     const id = nextId(state.tasks);
-    const requestedStatus = args.status || 'planning';
-    // require a plan to mark as planned
-    if (requestedStatus === 'planned' && !args.plan?.trim()) {
-      return { content: [{ type: 'text', text: 'Cannot set status to planned without a plan. Write a detailed plan first.' }] };
+    const requestedStatus = args.status || 'draft';
+    // require a plan to mark as reviewed
+    if (requestedStatus === 'reviewed' && !args.plan?.trim()) {
+      return { content: [{ type: 'text', text: 'Cannot set status to reviewed without a plan. Write a detailed plan first.' }] };
     }
-    const status = requestedStatus === 'in_progress' || requestedStatus === 'done'
-      ? 'planned'
+    const status = requestedStatus === 'running' || requestedStatus === 'done'
+      ? 'reviewed'
       : requestedStatus;
     const task: Task = {
       id,
@@ -335,7 +344,7 @@ export const tasksUpdateTool = tool(
     id: z.string(),
     title: z.string().optional(),
     goalId: z.string().nullable().optional(),
-    status: z.enum(['planning', 'planned', 'in_progress', 'done', 'blocked', 'cancelled']).optional(),
+    status: z.enum(['draft', 'reviewed', 'approved', 'running', 'checking', 'done', 'blocked', 'cancelled']).optional(),
     plan: z.string().optional(),
     result: z.string().optional(),
     reason: z.string().optional(),
@@ -347,9 +356,9 @@ export const tasksUpdateTool = tool(
     const task = state.tasks.find(t => t.id === args.id);
     if (!task) return { content: [{ type: 'text', text: `Task #${args.id} not found` }], isError: true };
 
-    // require a plan to transition to planned
-    if (args.status === 'planned' && !args.plan?.trim() && !task.plan?.trim()) {
-      return { content: [{ type: 'text', text: 'Cannot set status to planned without a plan. Write a detailed plan first.' }] };
+    // require a plan to transition to reviewed
+    if (args.status === 'reviewed' && !args.plan?.trim() && !task.plan?.trim()) {
+      return { content: [{ type: 'text', text: 'Cannot set status to reviewed without a plan. Write a detailed plan first.' }] };
     }
 
     if (args.title !== undefined) task.title = args.title;
@@ -368,7 +377,7 @@ export const tasksUpdateTool = tool(
     task.updatedAt = new Date().toISOString();
     if (task.status === 'done' && !task.completedAt) task.completedAt = task.updatedAt;
     if (task.status !== 'done') task.completedAt = undefined;
-    if (task.status !== 'planned') task.approvalRequestId = undefined;
+    if (task.status !== 'reviewed') task.approvalRequestId = undefined;
     ensureApprovalRequest(task);
     saveTasks(state);
 
@@ -394,14 +403,14 @@ export const tasksDoneTool = tool(
     const now = new Date().toISOString();
 
     if (!task.approvedAt) {
-      task.status = 'planned';
+      task.status = 'reviewed';
       if (args.result !== undefined) task.result = args.result;
       task.updatedAt = now;
       task.completedAt = undefined;
       ensureApprovalRequest(task);
       saveTasks(state);
-      appendTaskLog(task.id, 'task_done_blocked', 'Task attempted done before approval, moved to planned');
-      return { content: [{ type: 'text', text: `Task #${task.id} moved to planned for human approval` }] };
+      appendTaskLog(task.id, 'task_done_blocked', 'Task attempted done before approval, moved to reviewed');
+      return { content: [{ type: 'text', text: `Task #${task.id} moved to reviewed for human approval` }] };
     }
 
     task.status = 'done';

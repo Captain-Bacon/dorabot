@@ -2,7 +2,14 @@ import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { getDb } from '../db.js';
 
-export type GoalStatus = 'active' | 'paused' | 'done';
+export type GoalStatus = 'holding' | 'developing' | 'active' | 'checking' | 'done';
+
+// Backward compat: map old statuses to new
+function migrateGoalStatus(status: string): GoalStatus {
+  if (status === 'paused') return 'holding';
+  if (['holding', 'developing', 'active', 'checking', 'done'].includes(status)) return status as GoalStatus;
+  return 'active'; // fallback
+}
 
 export type Goal = {
   id: string;
@@ -24,7 +31,7 @@ function parseGoalRow(raw: string): Goal {
   const goal = JSON.parse(raw) as Goal;
   return {
     ...goal,
-    status: goal.status || 'active',
+    status: migrateGoalStatus(goal.status || 'active'),
     tags: Array.isArray(goal.tags) ? goal.tags : [],
   };
 }
@@ -66,7 +73,7 @@ export const goalsViewTool = tool(
   'goals_view',
   'View goals and their status.',
   {
-    status: z.enum(['all', 'active', 'paused', 'done']).optional(),
+    status: z.enum(['all', 'holding', 'developing', 'active', 'checking', 'done']).optional(),
     id: z.string().optional(),
   },
   async (args) => {
@@ -112,7 +119,7 @@ export const goalsAddTool = tool(
       id: nextId(state.goals),
       title: args.title,
       description: args.description,
-      status: 'active',
+      status: 'developing',
       tags: args.tags || [],
       createdAt: now,
       updatedAt: now,
@@ -130,7 +137,7 @@ export const goalsUpdateTool = tool(
     id: z.string(),
     title: z.string().optional(),
     description: z.string().optional(),
-    status: z.enum(['active', 'paused', 'done']).optional(),
+    status: z.enum(['holding', 'developing', 'active', 'checking', 'done']).optional(),
     tags: z.array(z.string()).optional(),
     reason: z.string().optional(),
   },

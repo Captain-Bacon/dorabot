@@ -175,12 +175,14 @@ Write consistently. User shares facts or preferences → USER.md or MEMORY.md. D
     const activeGoals = goals.goals.filter(g => g.status !== 'done');
     const activeTasks = tasks.tasks.filter(t => t.status !== 'done' && t.status !== 'cancelled');
     const statusRank: Record<Task['status'], number> = {
-      in_progress: 0,
+      running: 0,
       blocked: 1,
-      planning: 2,
-      planned: 3,
-      done: 4,
-      cancelled: 5,
+      checking: 2,
+      draft: 3,
+      reviewed: 4,
+      approved: 5,
+      done: 6,
+      cancelled: 7,
     };
     const sortedTasks = [...activeTasks].sort((a, b) => (
       statusRank[a.status] - statusRank[b.status]
@@ -189,18 +191,20 @@ Write consistently. User shares facts or preferences → USER.md or MEMORY.md. D
     const taskLines = sortedTasks.map(t => {
       const goal = t.goalId ? goals.goals.find(g => g.id === t.goalId)?.title : undefined;
       let state = t.status as string;
-      if (t.status === 'planned') {
-        if (t.approvalRequestId) state = 'planned:needs_approval';
-        else if (t.reason && /denied/i.test(t.reason)) state = 'planned:denied';
-        else if (t.approvedAt) state = 'planned:ready';
+      if (t.status === 'reviewed') {
+        if (t.approvalRequestId) state = 'reviewed:needs_approval';
+        else if (t.reason && /denied/i.test(t.reason)) state = 'reviewed:denied';
+        else if (t.approvedAt) state = 'approved';
       }
       return `- #${t.id} [${state}] ${t.title}${goal ? ` [goal:${goal}]` : ''}`;
     });
 
     const goalRank: Record<Goal['status'], number> = {
       active: 0,
-      paused: 1,
-      done: 2,
+      developing: 1,
+      checking: 2,
+      holding: 3,
+      done: 4,
     };
     const goalLines = activeGoals
       .sort((a, b) => goalRank[a.status] - goalRank[b.status] || a.createdAt.localeCompare(b.createdAt))
@@ -213,24 +217,33 @@ Pipeline: define goals → create tasks → write plan → wait for approval →
 
 **Goals** (goals_view/goals_add/goals_update/goals_delete):
 - High-level outcomes. Short, durable titles. Use description for context.
-- Status: active (working on it), paused (deprioritized), done (completed).
+- Modes express what kind of attention a goal needs:
+  - \`holding\`: user is still thinking, hasn't started. Agent hands off entirely.
+  - \`developing\`: idea needs fleshing out. Agent can research, suggest, challenge, propose tasks. Does NOT execute.
+  - \`active\`: goal has approved tasks, ready for execution. Normal workflow.
+  - \`checking\`: work done, needs verification against original intent. A different agent reviews.
+  - \`done\`: goal is met and verified.
+- New goals default to \`developing\`. Move to \`active\` when tasks are approved for execution.
+- Agent can suggest mode transitions, only the user confirms.
 
 **Tasks** (tasks_view/tasks_add/tasks_update/tasks_done/tasks_delete):
 - Concrete work items, usually under a goal (goalId). Can be orphan.
-- Status flow: planning → planned → (human approves) → in_progress → done.
-- \`planning\`: you're still drafting the plan. \`planned\`: ready for human review.
-- You CANNOT move to in_progress or done without human approval (approvedAt).
-- Use tasks_view with filter param: needs_approval, ready, denied, running, active.
+- Status flow: draft → reviewed → (human approves) → approved → running → done.
+- \`draft\`: you're still writing the plan. \`reviewed\`: plan reviewed, ready for human approval.
+- \`approved\`: human approved, ready for pickup. \`running\`: executing. \`checking\`: verifying output (opt-in).
+- You CANNOT move to running or done without human approval (approvedAt).
+- \`blocked\` and \`cancelled\` are orthogonal states, independent of the main flow.
+- Use tasks_view with filter param: needs_approval, approved, denied, running, active.
 
-**Plans**: every task MUST have a plan before submission. Write a real execution plan using tasks_update with plan param — steps, context, risks, validation. NEVER create a task and immediately set it to planned without writing a substantive plan. The tool will reject it.
+**Plans**: every task MUST have a plan before submission. Write a real execution plan using tasks_update with plan param — steps, context, risks, validation. NEVER create a task and immediately set it to reviewed without writing a substantive plan. The tool will reject it.
 
 **Approval flow**:
-1. Create task with status=planning. Research and think through the approach.
-2. Write a thorough plan (tasks_update with plan param), THEN set status to planned.
+1. Create task with status=draft. Research and think through the approach.
+2. Write a thorough plan (tasks_update with plan param), THEN set status to reviewed.
 3. Human sees it in their dashboard, reads plan, approves or denies.
 4. If approved (approvedAt set), ask the user before starting it. If denied (reason set), revise or drop. Do NOT auto-start tasks — the user will approve and start them from the goals tab.
 5. Check tasks_view(filter: "needs_approval") to see what's waiting.
-6. Check tasks_view(filter: "ready") to find approved tasks you can start.
+6. Check tasks_view(filter: "approved") to find approved tasks you can start.
 7. Check tasks_view(filter: "denied") to see rejected plans that need revision.
 
 **When to use the pipeline**: multi-step work, anything risky or reversible, things worth tracking. Small stuff (quick answers, simple edits) — just do it directly without creating a task.
