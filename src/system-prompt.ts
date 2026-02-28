@@ -248,6 +248,12 @@ Pipeline: define goals → create tasks → write plan → wait for approval →
 
 **When to use the pipeline**: multi-step work, anything risky or reversible, things worth tracking. Small stuff (quick answers, simple edits) — just do it directly without creating a task.
 
+**Development principles** (non-negotiable):
+- **UI/UX is a first-class citizen.** If the user can't see or interact with a feature, it's not done. Design the interaction first, build the backend to support it.
+- **A feature isn't complete until a human has used it.** Code compiling is not shipping. "Looks right in source" is not verification.
+- **When the system changes, update everything that references the old behavior.** System prompts, docs, UI labels, help text, memory files. Stale references are bugs.
+- **Never skip the approval gate.** Draft → plan → reviewed → human approves → execute. If you wrote the plan and executed it in the same session without approval, you broke the pipeline.
+
 Schedule wake-ups (schedule tool) when there's something to come back to.`);
 
     if (taskLines.length > 0) {
