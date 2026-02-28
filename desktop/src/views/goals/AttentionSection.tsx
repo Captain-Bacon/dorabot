@@ -10,7 +10,7 @@ type Props = {
   tasks: Task[];
   goals: Map<string, Goal>;
   taskRuns: Record<string, TaskRun>;
-  onApprove: (task: Task) => void;
+  onApprove: (task: Task, autoStart?: boolean) => void;
   onDeny: (task: Task, reason?: string) => void;
   onStart: (taskId: string, mode?: 'plan' | 'execute') => void;
   onTaskClick: (task: Task) => void;
@@ -119,9 +119,19 @@ export function AttentionSection({ tasks, goals, taskRuns, onApprove, onDeny, on
                               size="sm"
                               className="h-6 text-[10px] text-emerald-500 hover:bg-emerald-500/10"
                               disabled={isBusy}
-                              onClick={() => onApprove(task)}
+                              onClick={() => onApprove(task, false)}
                             >
                               Approve
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-[10px] text-emerald-500 hover:bg-emerald-500/10"
+                              disabled={isBusy}
+                              onClick={() => onApprove(task, true)}
+                            >
+                              <Play className="mr-1 h-2.5 w-2.5" />
+                              Approve & Start
                             </Button>
                           </>
                         )}

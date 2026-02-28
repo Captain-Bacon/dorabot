@@ -131,14 +131,27 @@ export function GoalsView({ gateway, onViewSession, onSetupChat }: Props) {
     finally { setSaving(null); }
   }, [load]);
 
-  const approveTask = useCallback((task: Task) => {
+  const approveTask = useCallback((task: Task, autoStart = false) => {
     void wrap(`task:${task.id}:approve`, async () => {
-      await gateway.rpc('tasks.approve', task.approvalRequestId
-        ? { requestId: task.approvalRequestId, taskId: task.id }
-        : { taskId: task.id });
-      toast.success(`Approved: ${task.title}`);
+      const res = await gateway.rpc('tasks.approve', {
+        ...(task.approvalRequestId ? { requestId: task.approvalRequestId } : {}),
+        taskId: task.id,
+        autoStart,
+      }) as { started?: boolean; taskId?: string } | null;
+      if (autoStart && res) {
+        toast.success(`Approved & started: ${task.title}`);
+        // If started, navigate to the task session
+        if (onViewSession) {
+          const startRes = res as any;
+          if (startRes.sessionId && startRes.chatId) {
+            onViewSession(startRes.sessionId, 'desktop', startRes.chatId, 'dm');
+          }
+        }
+      } else {
+        toast.success(`Approved: ${task.title}`);
+      }
     });
-  }, [gateway, wrap]);
+  }, [gateway, wrap, onViewSession]);
 
   const denyTask = useCallback((task: Task, reason?: string) => {
     void wrap(`task:${task.id}:deny`, async () => {
