@@ -2676,8 +2676,8 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
             }
             const u = m.usage as Record<string, number>;
             agentUsage = {
-              inputTokens: u?.input_tokens || 0,
-              outputTokens: u?.output_tokens || 0,
+              inputTokens: u?.inputTokens || u?.input_tokens || 0,
+              outputTokens: u?.outputTokens || u?.output_tokens || 0,
               totalCostUsd: (m.total_cost_usd as number) || 0,
             };
 
