@@ -2675,11 +2675,13 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
               fileSessionManager.setMetadata(session.sessionId, { sdkSessionId: agentSessionId });
             }
             const u = m.usage as Record<string, number>;
+            console.log('[context-debug] m.usage keys:', u ? Object.keys(u) : 'null', 'raw:', JSON.stringify(u));
             agentUsage = {
               inputTokens: u?.inputTokens || u?.input_tokens || 0,
               outputTokens: u?.outputTokens || u?.output_tokens || 0,
               totalCostUsd: (m.total_cost_usd as number) || 0,
             };
+            console.log('[context-debug] agentUsage:', JSON.stringify(agentUsage), 'sessionKey:', sessionKey);
 
             // compute cumulative context usage before broadcasting result
             const currentUsagePre = contextUsageMap.get(sessionKey) || { usage: 0, limit: CONTEXT_LIMIT };

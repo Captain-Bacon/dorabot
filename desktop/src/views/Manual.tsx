@@ -43,7 +43,7 @@ export function ManualView({ gateway }: Props) {
   const [questionInput, setQuestionInput] = useState('');
   const [improvingSections, setImprovingSections] = useState<Set<string>>(new Set());
   const contentRef = useRef<HTMLDivElement>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  // scrollRef removed: using scrollIntoView instead of manual scrollTo
 
   // Load manual content
   useEffect(() => {
@@ -89,16 +89,8 @@ export function ManualView({ gateway }: Props) {
   // Scroll to section
   const scrollToSection = useCallback((id: string) => {
     const element = document.getElementById(id);
-    if (element && scrollRef.current) {
-      const container = scrollRef.current;
-      const elementTop = element.offsetTop;
-      const containerTop = container.scrollTop;
-      const offset = elementTop - containerTop - 20;
-
-      container.scrollTo({
-        top: containerTop + offset,
-        behavior: 'smooth',
-      });
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
       setActiveSection(id);
     }
   }, []);
@@ -427,7 +419,7 @@ export function ManualView({ gateway }: Props) {
 
       {/* Content Area */}
       <div className="flex-1 flex flex-col">
-        <ScrollArea className="flex-1" ref={scrollRef}>
+        <ScrollArea className="flex-1">
           <div className="max-w-4xl mx-auto p-8" ref={contentRef}>
             <Markdown
               remarkPlugins={[remarkGfm]}
