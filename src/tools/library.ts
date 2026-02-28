@@ -1,6 +1,6 @@
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, watch } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, watch, unlinkSync } from 'node:fs';
 import { join, extname, relative } from 'node:path';
 import { homedir } from 'node:os';
 import MiniSearch from 'minisearch';
@@ -394,3 +394,109 @@ export const libraryTools = [
   librarySearchTool,
   libraryReindexTool,
 ];
+
+// ── Exported API for RPC handlers ────────────────────────
+
+export async function addLibrary(args: {
+  name: string;
+  path: string;
+  domains: string[];
+  trustLevel?: TrustLevel;
+  updateFrequency?: UpdateFrequency;
+  fileTypes?: string[];
+}): Promise<Library> {
+  const manifest = loadManifest();
+  const id = generateId(args.name);
+  if (manifest.libraries.find(lib => lib.id === id)) {
+    throw new Error(`Library with id "${id}" already exists`);
+  }
+  const expandedPath = args.path.replace(/^~/, homedir());
+  if (!existsSync(expandedPath)) {
+    throw new Error(`Path does not exist: ${expandedPath}`);
+  }
+  const library: Library = {
+    id,
+    name: args.name,
+    path: args.path,
+    domains: args.domains,
+    trustLevel: args.trustLevel || 'authoritative',
+    updateFrequency: args.updateFrequency || 'static',
+    fileTypes: args.fileTypes || ['.md', '.txt', '.pdf'],
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+  manifest.libraries.push(library);
+  saveManifest(manifest);
+  await indexLibrary(library);
+  if (library.updateFrequency === 'live') {
+    setupWatcher(library, () => { library.updatedAt = Date.now(); saveManifest(manifest); });
+  }
+  return library;
+}
+
+export function removeLibrary(id: string): void {
+  const manifest = loadManifest();
+  const idx = manifest.libraries.findIndex(lib => lib.id === id);
+  if (idx === -1) throw new Error(`Library with id "${id}" not found`);
+  manifest.libraries.splice(idx, 1);
+  saveManifest(manifest);
+  const indexPath = join(LIBRARIES_DIR, `${id}.index.json`);
+  if (existsSync(indexPath)) {
+    try { unlinkSync(indexPath); } catch { writeFileSync(indexPath, ''); }
+  }
+}
+
+export async function reindexLibraryById(id: string): Promise<void> {
+  const manifest = loadManifest();
+  const library = manifest.libraries.find(lib => lib.id === id);
+  if (!library) throw new Error(`Library with id "${id}" not found`);
+  await indexLibrary(library);
+  library.updatedAt = Date.now();
+  saveManifest(manifest);
+}
+
+export async function searchLibraries(query: string, opts?: { libraryIds?: string[]; limit?: number }): Promise<SearchResult[]> {
+  const manifest = loadManifest();
+  let libraries = manifest.libraries;
+  if (opts?.libraryIds?.length) {
+    libraries = libraries.filter(lib => opts.libraryIds!.includes(lib.id));
+  }
+  if (libraries.length === 0) return [];
+  const allResults: SearchResult[] = [];
+  for (const library of libraries) {
+    const index = await ensureIndexed(library);
+    const results = index.search(query, { prefix: true, fuzzy: 0.2 });
+    results.forEach(result => {
+      allResults.push({
+        libraryId: library.id,
+        libraryName: library.name,
+        filePath: result.filePath,
+        chunk: result.chunk,
+        score: result.score,
+        metadata: result.metadata,
+      });
+    });
+  }
+  allResults.sort((a, b) => b.score - a.score);
+  return allResults.slice(0, opts?.limit || 10);
+}
+
+export function getLibraryStats(id: string): { fileCount: number; chunkCount: number; indexSizeBytes: number } | null {
+  const indexPath = join(LIBRARIES_DIR, `${id}.index.json`);
+  if (!existsSync(indexPath)) return null;
+  try {
+    const raw = readFileSync(indexPath, 'utf-8');
+    const stats = statSync(indexPath);
+    const parsed = JSON.parse(raw);
+    const chunkCount = parsed.documentCount || 0;
+    // count unique file paths from stored fields
+    const docs = parsed.storedFields || {};
+    const files = new Set<string>();
+    for (const doc of Object.values(docs) as any[]) {
+      if (doc.filePath) files.add(doc.filePath);
+    }
+    return { fileCount: files.size, chunkCount, indexSizeBytes: stats.size };
+  } catch {
+    return null;
+  }
+}

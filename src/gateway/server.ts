@@ -47,6 +47,7 @@ import {
 } from '../tools/tasks.js';
 import { loadResearch, saveResearch, readResearchContent, writeResearchFile, nextId as nextResearchId, type ResearchItem } from '../tools/research.js';
 import { getAllAgents, getBuiltInAgents, isBuiltInAgent } from '../agents/definitions.js';
+import { loadManifest, addLibrary, removeLibrary, reindexLibraryById, searchLibraries, getLibraryStats, type Library } from '../tools/library.js';
 import { getProvider, getProviderByName, disposeAllProviders } from '../providers/index.js';
 import { isClaudeInstalled, hasOAuthTokens, getApiKey as getClaudeApiKey, getActiveAuthMethod, isOAuthTokenExpired, onClaudeAuthRequired } from '../providers/claude.js';
 import { isCodexInstalled, hasCodexAuth, onCodexAuthRequired } from '../providers/codex.js';
@@ -4848,6 +4849,66 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           };
           saveConfig(config);
           return { id, result: { name: newName, ...config.agents[newName], isBuiltIn: false, enabled: true } };
+        }
+
+        // ── Library RPCs ─────────────────────────────────────────
+        case 'libraries.list': {
+          const manifest = loadManifest();
+          const libs = manifest.libraries.map(lib => {
+            const stats = getLibraryStats(lib.id);
+            return { ...lib, fileCount: stats?.fileCount ?? 0, chunkCount: stats?.chunkCount ?? 0 };
+          });
+          return { id, result: libs };
+        }
+
+        case 'libraries.add': {
+          try {
+            const lib = await addLibrary({
+              name: params?.name as string,
+              path: params?.path as string,
+              domains: (params?.domains as string[]) || [],
+              trustLevel: params?.trustLevel as any,
+              updateFrequency: params?.updateFrequency as any,
+              fileTypes: params?.fileTypes as string[],
+            });
+            const stats = getLibraryStats(lib.id);
+            return { id, result: { ...lib, fileCount: stats?.fileCount ?? 0, chunkCount: stats?.chunkCount ?? 0 } };
+          } catch (err) {
+            return { id, error: err instanceof Error ? err.message : String(err) };
+          }
+        }
+
+        case 'libraries.remove': {
+          try {
+            removeLibrary(params?.id as string);
+            return { id, result: { removed: true } };
+          } catch (err) {
+            return { id, error: err instanceof Error ? err.message : String(err) };
+          }
+        }
+
+        case 'libraries.search': {
+          try {
+            const results = await searchLibraries(params?.query as string, {
+              libraryIds: params?.libraryIds as string[],
+              limit: params?.limit as number,
+            });
+            return { id, result: results };
+          } catch (err) {
+            return { id, error: err instanceof Error ? err.message : String(err) };
+          }
+        }
+
+        case 'libraries.reindex': {
+          try {
+            await reindexLibraryById(params?.id as string);
+            const manifest = loadManifest();
+            const lib = manifest.libraries.find(l => l.id === params?.id);
+            const stats = lib ? getLibraryStats(lib.id) : null;
+            return { id, result: { reindexed: true, fileCount: stats?.fileCount ?? 0, chunkCount: stats?.chunkCount ?? 0 } };
+          } catch (err) {
+            return { id, error: err instanceof Error ? err.message : String(err) };
+          }
         }
 
         // ── dev RPCs ──────────────────────────────────────────────

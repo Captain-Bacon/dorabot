@@ -136,7 +136,12 @@ export type RpcMethod =
   | 'agent.run_background'
   | 'agent.background_runs'
   | 'sessions.subscribe'
-  | 'sessions.unsubscribe';
+  | 'sessions.unsubscribe'
+  | 'libraries.list'
+  | 'libraries.add'
+  | 'libraries.remove'
+  | 'libraries.search'
+  | 'libraries.reindex';
 
 export type GatewayEventName =
   | 'agent.stream'

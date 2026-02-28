@@ -15,6 +15,7 @@ import { GoalsView } from '../views/Goals';
 import { ResearchView } from '../views/Research';
 import { InfrastructureView } from '../views/Infrastructure';
 import { ManualView } from '../views/Manual';
+import { LibrariesView } from '../views/Libraries';
 import { FileViewer } from './FileViewer';
 import { ErrorBoundary } from './ErrorBoundary';
 import { cn } from '@/lib/utils';
@@ -155,6 +156,8 @@ export function EditorGroupPanel({
         return <InfrastructureView gateway={gateway} />;
       case 'manual':
         return <ManualView gateway={gateway} />;
+      case 'libraries':
+        return <LibrariesView gateway={gateway} />;
       default:
         return null;
     }

@@ -3,7 +3,7 @@ import type { useGateway } from './useGateway';
 import type { useLayout } from './useLayout';
 import type { GroupId } from './useLayout';
 
-export type TabType = 'chat' | 'channels' | 'goals' | 'automation' | 'extensions' | 'memory' | 'research' | 'settings' | 'infrastructure' | 'manual';
+export type TabType = 'chat' | 'channels' | 'goals' | 'automation' | 'extensions' | 'memory' | 'research' | 'settings' | 'infrastructure' | 'manual' | 'libraries';
 
 export type ChatTab = {
   id: string;
