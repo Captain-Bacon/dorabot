@@ -539,6 +539,13 @@ export function startScheduler(opts: {
       }
     } catch (err) {
       onItemRun?.(item, { status: 'failed', result: String(err) });
+      // still reschedule next run on failure (prevents infinite rapid retries)
+      const next = computeNextRun(item);
+      item.nextRunAt = next?.toISOString();
+      if (!item.nextRunAt && !item.rrule) {
+        item.enabled = false;
+      }
+      updateCalendarItemDb(item);
     }
   };
 

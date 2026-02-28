@@ -2822,6 +2822,12 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
             // clear snapshot on turn end
             sessionSnapshots.delete(sessionKey);
 
+            // calendar/scheduled runs: terminate after first turn so scheduler can reschedule
+            if (source.startsWith('calendar/')) {
+              const ac = activeAbortControllers.get(sessionKey);
+              if (ac) ac.abort();
+            }
+
             // reset for next turn (persistent sessions get multiple result events)
             usedMessageTool = false;
             agentText = '';
