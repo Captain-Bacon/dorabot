@@ -213,6 +213,28 @@ export function GoalsView({ gateway, onViewSession, onSetupChat }: Props) {
     });
   }, [gateway, wrap]);
 
+  const reopenGoal = useCallback((goal: Goal) => {
+    void wrap(`goal:${goal.id}`, async () => {
+      await gateway.rpc('goals.update', { id: goal.id, status: 'active' as GoalStatus });
+      toast.success(`Reopened: ${goal.title}`);
+    });
+  }, [gateway, wrap]);
+
+  const nudgeGoal = useCallback((goal: Goal) => {
+    if (!onSetupChat) return;
+    const taskSummary = tasks
+      .filter(t => t.goalId === goal.id)
+      .map(t => `- "${t.title}" [${t.status}]`)
+      .join('\n');
+    const prompt = `Assess goal #${goal.id}: "${goal.title}"${goal.description ? ` (${goal.description})` : ''}.
+
+Tasks:
+${taskSummary || '(none)'}
+
+Look at this goal holistically. What's the situation? Is the goal actually met? What's missing? What's the gap between the intent and reality? Don't jump to creating tasks. Just give me an honest assessment.`;
+    onSetupChat(prompt);
+  }, [tasks, onSetupChat]);
+
   const deleteGoal = useCallback((goalId: string) => {
     void wrap(`goal:delete:${goalId}`, async () => {
       await gateway.rpc('goals.delete', { id: goalId });
@@ -354,6 +376,8 @@ export function GoalsView({ gateway, onViewSession, onSetupChat }: Props) {
                   onUnblockTask={unblockTask}
                   onToggleGoalStatus={toggleGoalStatus}
                   onCompleteGoal={completeGoal}
+                  onReopenGoal={reopenGoal}
+                  onNudgeGoal={nudgeGoal}
                   onDeleteGoal={deleteGoal}
                   onCreateTask={createTask}
                   busy={saving}

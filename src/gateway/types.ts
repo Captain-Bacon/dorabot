@@ -87,6 +87,7 @@ export type RpcMethod =
   | 'chat.send'
   | 'chat.history'
   | 'chat.answerQuestion'
+  | 'chat.dismissQuestion'
   | 'sessions.list'
   | 'sessions.get'
   | 'sessions.delete'

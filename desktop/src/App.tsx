@@ -23,7 +23,7 @@ import {
   MessageSquare, Radio, Zap, Brain, Settings2,
   Sparkles, LayoutGrid, Loader2, Star,
   Sun, Moon, Clock, FileSearch, Plug, Folder, FolderOpen, X,
-  ShieldAlert, CalendarCheck, Target, FlaskConical, KeyRound, Blocks, Search, BookOpen
+  ShieldAlert, CalendarCheck, Target, FlaskConical, KeyRound, Blocks, Search, BookOpen, MessageCircle
 } from 'lucide-react';
 
 type SessionFilter = 'all' | 'desktop' | 'telegram' | 'whatsapp';
@@ -304,6 +304,17 @@ export default function App() {
           });
           if (!windowFocused) {
             notify('research updated');
+            playNotifSound();
+          }
+          break;
+        case 'question.timeout' as any:
+          toast.warning('Question timed out', {
+            description: 'No answer was provided in time. The agent continued with its best judgment.',
+            icon: <MessageCircle className="w-4 h-4 text-amber-400" />,
+            duration: 8000,
+          });
+          if (!windowFocused) {
+            notify('question timed out');
             playNotifSound();
           }
           break;

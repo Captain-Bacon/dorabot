@@ -174,6 +174,7 @@ export type Config = {
   userTimezone?: string;
   sessionDir: string;
   cwd: string;
+  questionTimeoutMs?: number;
 };
 
 const DEFAULT_CONFIG: Config = {

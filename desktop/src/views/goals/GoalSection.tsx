@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import { ChevronRight, MoreHorizontal, Plus, Pause, Play, Check, Trash2 } from 'lucide-react';
+import { ChevronRight, MoreHorizontal, Plus, Pause, Play, Check, Trash2, RotateCcw, Eye } from 'lucide-react';
 import { TaskRow } from './TaskRow';
 import type { Goal, Task, TaskPresentation } from './helpers';
 import { getGoalColor, getStatusBadge } from './helpers';
@@ -27,6 +27,8 @@ type Props = {
   onUnblockTask: (taskId: string) => void;
   onToggleGoalStatus: (goal: Goal) => void;
   onCompleteGoal: (goal: Goal) => void;
+  onReopenGoal: (goal: Goal) => void;
+  onNudgeGoal: (goal: Goal) => void;
   onDeleteGoal: (goalId: string) => void;
   onCreateTask: (title: string, goalId: string) => void;
   busy?: string | null;
@@ -35,7 +37,7 @@ type Props = {
 export function GoalSection({
   goal, tasks, allTasks, presentations, defaultOpen, filtered = false,
   onTaskClick, onStartTask, onWatchTask, onUnblockTask,
-  onToggleGoalStatus, onCompleteGoal, onDeleteGoal, onCreateTask, busy,
+  onToggleGoalStatus, onCompleteGoal, onReopenGoal, onNudgeGoal, onDeleteGoal, onCreateTask, busy,
 }: Props) {
   // Auto-expand if there are actionable tasks, otherwise collapse
   const hasActionable = tasks.some(t => {
@@ -107,6 +109,15 @@ export function GoalSection({
               variant="ghost"
               size="sm"
               className="h-6 w-6 p-0"
+              onClick={() => onNudgeGoal(goal)}
+              title="What's going on with this goal?"
+            >
+              <Eye className="h-3 w-3" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0"
               onClick={() => setShowAdd(v => !v)}
               title="Add work item"
             >
@@ -119,16 +130,24 @@ export function GoalSection({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => onToggleGoalStatus(goal)}>
-                  {goal.status === 'paused' ? (
-                    <><Play className="mr-2 h-3.5 w-3.5" /> Resume</>
-                  ) : (
-                    <><Pause className="mr-2 h-3.5 w-3.5" /> Pause</>
-                  )}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onCompleteGoal(goal)}>
-                  <Check className="mr-2 h-3.5 w-3.5" /> Mark done
-                </DropdownMenuItem>
+                {goal.status === 'done' ? (
+                  <DropdownMenuItem onClick={() => onReopenGoal(goal)}>
+                    <RotateCcw className="mr-2 h-3.5 w-3.5" /> Reopen
+                  </DropdownMenuItem>
+                ) : (
+                  <>
+                    <DropdownMenuItem onClick={() => onToggleGoalStatus(goal)}>
+                      {goal.status === 'paused' ? (
+                        <><Play className="mr-2 h-3.5 w-3.5" /> Resume</>
+                      ) : (
+                        <><Pause className="mr-2 h-3.5 w-3.5" /> Pause</>
+                      )}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onCompleteGoal(goal)}>
+                      <Check className="mr-2 h-3.5 w-3.5" /> Mark done
+                    </DropdownMenuItem>
+                  </>
+                )}
                 <DropdownMenuItem
                   className="text-destructive"
                   onClick={() => onDeleteGoal(goal.id)}

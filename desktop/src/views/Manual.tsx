@@ -50,10 +50,8 @@ export function ManualView({ gateway }: Props) {
     const loadManual = async () => {
       if (gateway.connectionState !== 'connected') return;
       try {
-        const result = await gateway.readFile({
-          path: '/Users/jonathanluker/GitHub/dorabot/docs/USER-MANUAL.md'
-        });
-        if (result.content) {
+        const result = await gateway.rpc('manual.read') as { content: string };
+        if (result?.content) {
           setContent(result.content);
           parseHeadings(result.content);
         }

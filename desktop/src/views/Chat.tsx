@@ -364,7 +364,7 @@ function AskUserQuestionPanel({
 }: {
   question: AskUserQuestion;
   onAnswer: (requestId: string, answers: Record<string, string>) => void;
-  onDismiss: () => void;
+  onDismiss: (requestId: string) => void;
   streaming?: boolean;
 }) {
   const [step, setStep] = useState(0);
@@ -411,8 +411,8 @@ function AskUserQuestionPanel({
     (useOther[q.question] && otherTexts[q.question]) || selections[q.question];
   const isLast = step === total - 1;
 
-  // Countdown timer (5 min timeout from gateway)
-  const [secondsLeft, setSecondsLeft] = useState(300);
+  // Countdown timer (10 min timeout from gateway, configurable via questionTimeoutMs)
+  const [secondsLeft, setSecondsLeft] = useState(600);
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => {
     const interval = setInterval(() => setSecondsLeft(s => Math.max(0, s - 1)), 1000);
@@ -494,9 +494,19 @@ function AskUserQuestionPanel({
             />
           )}
           <div className="flex justify-between pt-0.5">
-            <div>
+            <div className="flex gap-1.5">
               {step > 0 && (
                 <Button variant="outline" size="sm" className="h-6 text-[11px] px-2" onClick={() => setStep(s => s - 1)}>back</Button>
+              )}
+              {!streaming && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-[11px] px-2 text-muted-foreground hover:text-destructive"
+                  onClick={() => onDismiss(question.requestId)}
+                >
+                  dismiss
+                </Button>
               )}
             </div>
             <div className="flex gap-1.5">
@@ -943,7 +953,7 @@ export function ChatView({ gateway, chatItems, agentStatus, pendingQuestion, ses
         <AskUserQuestionPanel
           question={pendingQuestion}
           onAnswer={(requestId, answers) => gateway.answerQuestion(requestId, answers, sessionKey)}
-          onDismiss={() => gateway.dismissQuestion(sessionKey)}
+          onDismiss={(requestId) => gateway.dismissQuestion(requestId, sessionKey)}
         />
       ) : streamingQuestion ? (
         <AskUserQuestionPanel

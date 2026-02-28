@@ -1559,14 +1559,19 @@ export function useGateway() {
     });
   }, [rpc]);
 
-  const dismissQuestion = useCallback((sessionKey?: string) => {
+  const dismissQuestion = useCallback(async (requestId: string, sessionKey?: string) => {
     const sk = sessionKey || activeSessionKeyRef.current;
+    try {
+      await rpc('chat.dismissQuestion', { requestId });
+    } catch (err) {
+      console.error('failed to dismiss question:', err);
+    }
     setSessionStates(prev => {
       const state = prev[sk];
       if (!state) return prev;
       return { ...prev, [sk]: { ...state, pendingQuestion: null } };
     });
-  }, []);
+  }, [rpc]);
 
   const approveToolUse = useCallback(async (requestId: string, modifiedInput?: Record<string, unknown>) => {
     resolvedApprovalIds.current.add(requestId);

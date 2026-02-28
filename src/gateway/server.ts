@@ -2087,15 +2087,23 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
       }
       updateQuestionState(requestId, 'pending', runSessionKey);
 
+      const timeoutMs = config.questionTimeoutMs ?? 600000; // Default 10 minutes (was 5)
       const answers = await new Promise<Record<string, string>>((resolveQ, rejectQ) => {
         const timeout = setTimeout(() => {
           if (pendingQuestions.has(requestId)) {
             const pending = pendingQuestions.get(requestId);
             pendingQuestions.delete(requestId);
-            if (pending) updateQuestionState(requestId, 'timeout', pending.sessionKey);
+            if (pending) {
+              updateQuestionState(requestId, 'timeout', pending.sessionKey);
+              // Broadcast timeout event so UI can show toast
+              broadcast({
+                event: 'question.timeout',
+                data: { requestId, sessionKey: pending.sessionKey, timestamp: Date.now() },
+              });
+            }
             rejectQ(new Error('Question timeout - no answer received'));
           }
-        }, 300000);
+        }, timeoutMs);
         pendingQuestions.set(requestId, { resolve: resolveQ, reject: rejectQ, sessionKey: runSessionKey, timeout });
       });
       updateQuestionState(requestId, 'answered', runSessionKey, answers);
@@ -3276,6 +3284,27 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           updateQuestionState(requestId, 'answered', pending.sessionKey, answers);
           pending.resolve(answers);
           return { id, result: { answered: true, idempotent: false } };
+        }
+
+        case 'chat.dismissQuestion': {
+          const requestId = params?.requestId as string;
+          if (!requestId) return { id, error: 'requestId required' };
+          const pending = pendingQuestions.get(requestId);
+          if (!pending) {
+            const known = questionStates.get(requestId);
+            if (known?.status === 'cancelled') {
+              return { id, result: { dismissed: true, idempotent: true } };
+            }
+            if (known?.status === 'timeout' || known?.status === 'answered') {
+              return { id, error: `question is already ${known.status}` };
+            }
+            return { id, error: 'no pending question with that ID' };
+          }
+          pendingQuestions.delete(requestId);
+          clearTimeout(pending.timeout);
+          updateQuestionState(requestId, 'cancelled', pending.sessionKey);
+          pending.reject(new Error('Question dismissed by user'));
+          return { id, result: { dismissed: true, idempotent: false } };
         }
 
         case 'chat.history': {
@@ -4476,6 +4505,19 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           broadcast({ event: 'research.update', data: {} });
           macNotify('Dora', `Research deleted: ${deleted.title}`);
           return { id, result: { deleted: true } };
+        }
+
+        case 'manual.read': {
+          const manualPath = join(process.cwd(), 'docs', 'USER-MANUAL.md');
+          try {
+            if (!existsSync(manualPath)) {
+              return { id, error: 'Manual file not found' };
+            }
+            const content = readFileSync(manualPath, 'utf-8');
+            return { id, result: { content } };
+          } catch (err: any) {
+            return { id, error: `Failed to read manual: ${err.message}` };
+          }
         }
 
         case 'skills.list': {

@@ -479,13 +479,18 @@ export function startScheduler(opts: {
   const now = Date.now();
   for (const item of items) {
     if (item.enabled !== false) {
-      // never ran + created in the last 60s = brand new, fire immediately
-      const isNew = !item.lastRunAt && (now - new Date(item.createdAt).getTime()) < 60_000;
-      if (isNew) {
-        item.nextRunAt = new Date().toISOString();
+      // preserve stored nextRunAt if it's still in the future (handles dev restarts)
+      if (item.nextRunAt && new Date(item.nextRunAt).getTime() > now) {
+        // keep existing nextRunAt (don't recompute on restart)
       } else {
-        const next = computeNextRun(item);
-        item.nextRunAt = next?.toISOString();
+        // never ran + created in the last 60s = brand new, fire immediately
+        const isNew = !item.lastRunAt && (now - new Date(item.createdAt).getTime()) < 60_000;
+        if (isNew) {
+          item.nextRunAt = new Date().toISOString();
+        } else {
+          const next = computeNextRun(item);
+          item.nextRunAt = next?.toISOString();
+        }
       }
       updateCalendarItemDb(item);
     }
