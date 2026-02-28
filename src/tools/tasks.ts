@@ -378,6 +378,10 @@ export const tasksUpdateTool = tool(
     if (task.status === 'done' && !task.completedAt) task.completedAt = task.updatedAt;
     if (task.status !== 'done') task.completedAt = undefined;
     if (task.status !== 'reviewed') task.approvalRequestId = undefined;
+    // Clear result field when status transitions to approved/reviewed (pending execution)
+    if (task.status === 'approved' || task.status === 'reviewed') {
+      task.result = undefined;
+    }
     ensureApprovalRequest(task);
     saveTasks(state);
 
