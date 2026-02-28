@@ -91,11 +91,16 @@ export function ManualView({ gateway }: Props) {
     const element = document.getElementById(id);
     const viewport = contentRef.current?.closest('[data-radix-scroll-area-viewport]');
 
-    if (element && viewport) {
+    if (element && viewport && contentRef.current) {
       const viewportElement = viewport as HTMLElement;
-      const elementTop = element.offsetTop;
+      // Calculate element position relative to content container
+      const contentTop = contentRef.current.getBoundingClientRect().top;
+      const elementTop = element.getBoundingClientRect().top;
+      const relativePosition = elementTop - contentTop;
+      const currentScroll = viewportElement.scrollTop;
+
       viewportElement.scrollTo({
-        top: elementTop - 80, // offset for header spacing
+        top: currentScroll + relativePosition - 80, // offset for header spacing
         behavior: 'smooth'
       });
       setActiveSection(id);
@@ -381,8 +386,8 @@ export function ManualView({ gateway }: Props) {
   return (
     <div className="flex h-full">
       {/* TOC Sidebar */}
-      <div className="w-64 border-r border-border flex flex-col bg-muted/5">
-        <div className="p-4 border-b border-border">
+      <div className="w-64 border-r border-border flex flex-col bg-muted/5 overflow-hidden">
+        <div className="p-4 border-b border-border shrink-0">
           <div className="flex items-center gap-2 mb-3">
             <BookOpen className="w-5 h-5 text-primary" />
             <h2 className="font-semibold">User Manual</h2>
@@ -398,7 +403,7 @@ export function ManualView({ gateway }: Props) {
           </div>
         </div>
 
-        <ScrollArea className="flex-1">
+        <ScrollArea className="flex-1 min-h-0">
           <div className="p-2">
             {filteredHeadings.map((heading) => (
               <button
@@ -432,8 +437,8 @@ export function ManualView({ gateway }: Props) {
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 flex flex-col">
-        <ScrollArea className="flex-1">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <ScrollArea className="h-full">
           <div className="max-w-4xl mx-auto p-8" ref={contentRef}>
             <Markdown
               remarkPlugins={[remarkGfm]}

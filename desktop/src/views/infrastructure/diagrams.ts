@@ -545,19 +545,16 @@ const stateL0: Diagram = {
   mermaid: `flowchart TD
     SE["🔑 Session<br/>Conversation Thread<br/>Created -> Active -> Cleared"]
     CX["📊 Context Window<br/>Token Budget<br/>Empty -> Filling -> Warning -> Full"]
-    TA["📋 Task<br/>Work Item<br/>Draft -> Reviewed -> Approved -> Running -> Done"]
-    GO["🎯 Goal<br/>High-Level Outcome<br/>Holding -> Developing -> Active -> Done"]
+    GT["📋 Goals & Tasks<br/>Planning System<br/>Goals -> Tasks -> Execution"]
     AG["🤖 Agent Run<br/>Single Execution<br/>Started -> Running -> Complete/Error"]
 
     SE -->|accumulates| CX
-    GO -->|decomposes into| TA
-    TA -->|triggers| AG
+    GT -->|triggers| AG
     AG -->|consumes| CX`,
   nodes: [
     { id: 'SE', label: 'Session', drillDownId: 'state-session' },
     { id: 'CX', label: 'Context Window', drillDownId: 'state-context' },
-    { id: 'TA', label: 'Task', drillDownId: 'state-task' },
-    { id: 'GO', label: 'Goal', drillDownId: 'state-goal' },
+    { id: 'GT', label: 'Goals & Tasks', drillDownId: 'state-goals-tasks' },
     { id: 'AG', label: 'Agent Run' },
   ],
 };
@@ -691,40 +688,35 @@ const stateGoalsTasks: Diagram = {
   id: 'state-goals-tasks',
   lens: 'state',
   title: 'Goals & Tasks State Machines',
-  parentId: 'state-l0',
   mermaid: `flowchart TD
-    G1["🎯 Goal State"]
-    GH["💤 Holding"]
-    GD["🔬 Developing"]
-    GA["✔️ Active"]
-    GC["🔄 Checking"]
-    GDN["✅ Done"]
+    GH["💤 Holding<br/>Not started<br/>Waiting or on-hold"]
+    GD["🔬 Developing<br/>Exploring<br/>Research and planning"]
+    GA["✔️ Active<br/>Executing<br/>Tasks running"]
+    GC["🔄 Checking<br/>Verifying<br/>Validation pass"]
+    GDN["✅ Done<br/>Complete<br/>Objective met"]
 
-    T1["📋 Task State"]
-    TDR["📝 Draft"]
-    TRV["📋 Reviewed"]
-    TAP["✔️ Approved"]
-    TRN["🏃 Running"]
-    TDN["✅ Done"]
+    TDR["📝 Draft<br/>Plan written<br/>Needs review"]
+    TRV["📋 Reviewed<br/>Submitted<br/>Awaiting approval"]
+    TAP["✔️ Approved<br/>Cleared<br/>Ready to run"]
+    TRN["🏃 Running<br/>Executing<br/>Implementation"]
+    TDN["✅ Done<br/>Complete<br/>Result recorded"]
 
-    G1 -.->|lifecycle| GH
     GH -->|develop| GD
     GD -->|approve| GA
     GA -->|check| GC
     GC -->|verify| GDN
 
-    T1 -.->|lifecycle| TDR
     TDR -->|submit| TRV
     TRV -->|approve| TAP
     TAP -->|start| TRN
     TRN -->|finish| TDN`,
   nodes: [
-    { id: 'G1', label: 'Goal State', drillDownId: 'state-task-details' },
     { id: 'GH', label: 'Holding' },
     { id: 'GD', label: 'Developing' },
     { id: 'GA', label: 'Active' },
-    { id: 'T1', label: 'Task State', drillDownId: 'state-task-details' },
-    { id: 'TDR', label: 'Draft' },
+    { id: 'GC', label: 'Checking' },
+    { id: 'GDN', label: 'Done' },
+    { id: 'TDR', label: 'Draft', drillDownId: 'state-task-details' },
     { id: 'TRV', label: 'Reviewed' },
     { id: 'TAP', label: 'Approved' },
   ],
