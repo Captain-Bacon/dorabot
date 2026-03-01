@@ -4,7 +4,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { Folder, File, ChevronRight, ChevronDown, FolderPlus, Pencil, Trash2 } from 'lucide-react';
+import { Folder, File, ChevronRight, ChevronDown, FolderPlus, Pencil, Trash2, Home } from 'lucide-react';
 
 type FileEntry = {
   name: string;
@@ -65,6 +65,7 @@ export function FileExplorer({ rpc, connected, onFileClick, onFileChange, initia
   const [dirs, setDirs] = useState<Map<string, DirState>>(new Map());
   const [expanded, setExpanded] = useState<Set<string>>(new Set(initialExpanded || []));
   const [selectedPath, setSelectedPath] = useState<string | null>(initialSelectedPath ?? null);
+  const [workspacePath, setWorkspacePath] = useState<string>('');
 
   // Report state changes to parent for per-tab persistence
   useEffect(() => {
@@ -98,9 +99,15 @@ export function FileExplorer({ rpc, connected, onFileClick, onFileChange, initia
   useEffect(() => {
     if (!connected) return;
     rpc('config.get').then((res: unknown) => {
-      const c = (res as Record<string, unknown>)?.cwd as string;
+      const config = res as Record<string, unknown>;
+      const c = config?.cwd as string;
       if (c) {
         setHomeCwd(c);
+        // Set workspace path (default to ~/.dorabot/workspace)
+        const homeMatch = c.match(/^\/Users\/[^/]+/);
+        if (homeMatch) {
+          setWorkspacePath(`${homeMatch[0]}/.dorabot/workspace`);
+        }
         if (!viewRoot) {
           setViewRoot(c);
           loadDir(c);
@@ -288,6 +295,28 @@ export function FileExplorer({ rpc, connected, onFileClick, onFileChange, initia
       </div>
       <ScrollArea className="flex-1 min-h-0">
         <div className="py-1">
+          {/* Quick Access Section */}
+          {workspacePath && (
+            <div className="mb-2 border-b border-border pb-2">
+              <div className="px-2 py-0.5 text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">Quick Access</div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div
+                    className={cn(
+                      'flex items-center gap-1.5 py-0.5 px-1 rounded-sm text-[11px] cursor-pointer transition-colors min-w-0 mx-1',
+                      viewRoot === workspacePath ? 'bg-primary/10 text-primary border border-primary/20' : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
+                    )}
+                    onClick={() => navigateTo(workspacePath)}
+                  >
+                    <Home className="w-3 h-3 shrink-0" />
+                    <span className="flex-1 truncate min-w-0 font-semibold">Workspace</span>
+                    <span className="text-[9px] text-muted-foreground shrink-0">~/.dorabot</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="text-[10px]">Quick access to saved work output</TooltipContent>
+              </Tooltip>
+            </div>
+          )}
           {viewRoot ? renderEntries(viewRoot, 0) : <div className="text-[11px] text-muted-foreground p-3">loading...</div>}
         </div>
       </ScrollArea>
