@@ -468,9 +468,10 @@ const logicTaskLifecycle: Diagram = {
     Approved -->|YES| Validate --> Done
     Approved -->|NO| Start
 
+    click Validate flowStartValidation "View validation"
     style Start fill:#e1f5ff
     style Done fill:#c8e6c9
-    style Validate click flowStartValidation "View validation"`,
+    style Validate fill:#fff9c4`,
   nodes: [
     { id: 'Start', label: 'User Creates Task' },
     { id: 'PlanCheck', label: 'Has Plan?' },

@@ -4087,6 +4087,24 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           return { id, result: { approved: false, taskId: finalTaskId, reason } };
         }
 
+        case 'tasks.done': {
+          const taskId = params?.id as string;
+          if (!taskId) return { id, error: 'id required' };
+          const tasks = loadTasks();
+          const task = tasks.tasks.find(t => t.id === taskId);
+          if (!task) return { id, error: 'task not found' };
+
+          task.status = 'done';
+          task.updatedAt = new Date().toISOString();
+          if (!task.completedAt) task.completedAt = task.updatedAt;
+
+          saveTasks(tasks);
+          appendTaskLog(taskId, 'task_done', `Task marked done: ${task.title}`);
+          broadcast({ event: 'goals.update', data: { taskId, task } });
+          macNotify('Dora', `Task done: ${task.title}`);
+          return { id, result: { taskId, status: 'done' } };
+        }
+
         case 'plans.list': {
           const plans = loadPlans();
           return { id, result: plans.tasks };
