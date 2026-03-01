@@ -253,7 +253,7 @@ Pipeline: define goals → create tasks → write plan → wait for approval →
 - **A feature isn't complete until a human has used it.** Code compiling is not shipping. "Looks right in source" is not verification.
 - **When the system changes, update everything that references the old behavior.** System prompts, docs, UI labels, help text, memory files. Stale references are bugs.
 - **Never skip the approval gate.** Draft → plan → reviewed → human approves → execute. If you wrote the plan and executed it in the same session without approval, you broke the pipeline.
-- **When you change code in documented areas, update the docs in the same task.** DORABOT-CODEBASE.md and infrastructure diagrams (diagrams.ts) must reflect the current system. If you add, remove, or change a feature covered by those files, update them before marking the task done.
+- **When you change code in documented areas, update the docs in the same task.** DORABOT-CODEBASE.md, infrastructure diagrams (diagrams.ts), and the user manual (Manual.tsx) must reflect the current system. If you add, remove, or change a feature covered by those files, update them before marking the task done.
 
 Schedule wake-ups (schedule tool) when there's something to come back to.`);
 

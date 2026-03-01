@@ -154,76 +154,12 @@ const structureTools: Diagram = {
     { id: 'HO', label: 'Handoff Tool' },
     { id: 'LIB', label: 'Library Tools' },
     { id: 'SCH', label: 'Scheduler Tools' },
-    { id: 'GT', label: 'Goals + Tasks', drillDownId: 'structure-goals-tasks' },
+    { id: 'GT', label: 'Goals + Tasks' },
     { id: 'BR', label: 'Browser Tool' },
   ],
 };
 
-const structureGoalsTasks: Diagram = {
-  id: 'structure-goals-tasks',
-  lens: 'structure',
-  title: 'Goals & Tasks System Overview',
-  parentId: 'structure-tools',
-  mermaid: `flowchart TD
-    GDB["⚡ Goals DB<br/>SQLite<br/>Goals table, status fields"]
-    GT["⚙️ Goals Tool<br/>CRUD + Queries<br/>Add, update, view goals"]
-    GUI["🖥️ Goals UI<br/>React<br/>View and manage goals"]
 
-    TDB["⚡ Tasks DB<br/>SQLite<br/>Tasks table, status, approval fields"]
-    TT["⚙️ Tasks Tool<br/>CRUD + Validation<br/>Add, update, run, approve tasks"]
-    GW["🔌 Gateway RPC<br/>Backend<br/>Tool registration, calls"]
-
-    PLAN["📄 PLAN.md<br/>Filesystem<br/>Task plan files, one per task"]
-    TL["📊 Task Logs<br/>SQLite<br/>Execution logs, timestamps"]
-
-    GDB -->|reads/writes| GT
-    GT -->|updates| GW
-    GW -->|streams to| GUI
-    TDB -->|reads/writes| TT
-    TT -->|updates| GW
-    PLAN -->|stores| TT
-    TT -->|writes| TL`,
-  nodes: [
-    { id: 'GDB', label: 'Goals DB' },
-    { id: 'GT', label: 'Goals Tool', drillDownId: 'structure-task-tool' },
-    { id: 'GUI', label: 'Goals UI' },
-    { id: 'TDB', label: 'Tasks DB' },
-    { id: 'TT', label: 'Tasks Tool', drillDownId: 'structure-task-tool' },
-    { id: 'GW', label: 'Gateway RPC' },
-    { id: 'PLAN', label: 'PLAN.md' },
-    { id: 'TL', label: 'Task Logs' },
-  ],
-};
-
-const structureTaskTool: Diagram = {
-  id: 'structure-task-tool',
-  lens: 'structure',
-  title: 'Task Tool Internals',
-  parentId: 'structure-goals-tasks',
-  mermaid: `flowchart TD
-    CRUD["⚙️ Task CRUD<br/>Create, read, update, delete<br/>Direct DB operations"]
-    PS["📄 Plan Storage<br/>Write PLAN.md<br/>Persists task approach to filesystem"]
-
-    AS["🔐 Approval System<br/>Validate transitions<br/>Check approvalRequestId, approvedAt, denialReason"]
-    SV["🛡️ Status Validation<br/>Guard transitions<br/>draft→reviewed→approved→running→done"]
-
-    DS["🔄 Derived State<br/>Compute UI states<br/>needs_approval, denied, approved, ready"]
-    TL["📊 Task Logs<br/>Write execution logs<br/>Track state changes, timestamps"]
-
-    CRUD -->|reads plan| PS
-    CRUD -->|validates| AS
-    AS -->|checks status| SV
-    SV -->|computes| DS
-    DS -->|updates| TL`,
-  nodes: [
-    { id: 'CRUD', label: 'Task CRUD' },
-    { id: 'PS', label: 'Plan Storage' },
-    { id: 'AS', label: 'Approval System' },
-    { id: 'SV', label: 'Status Validation' },
-    { id: 'DS', label: 'Derived State' },
-    { id: 'TL', label: 'Task Logs' },
-  ],
-};
 
 // ══════════════════════════════════════════════════════════════════
 // TIME LENS: Who talks to whom, in what order?
@@ -496,43 +432,201 @@ const logicTaskValidation: Diagram = {
   ],
 };
 
-const logicApprovalFlow: Diagram = {
-  id: 'logic-approval-flow',
+const logicTaskLifecycle: Diagram = {
+  id: 'logic-task-lifecycle',
   lens: 'logic',
-  title: 'Approval Flow',
+  title: 'Task Lifecycle: Creation to Completion',
+  parentId: 'logic-l0',
   mermaid: `flowchart TD
-    RV["📋 Set to reviewed<br/>Agent submitted plan<br/>Awaiting approval decision"]
+    Start([👤 User Creates Task])
+    PlanCheck{📋 Has<br/>Plan?}
+    Reviewed{✅ Status<br/>Reviewed?}
+    ApprovalReq["📤 Create<br/>Approval Request"]
+    Approved{✋ Human<br/>Approves?}
+    Validate["🧪 Validate &<br/>Execute"]
+    Done["✔️ Task<br/>Done"]
 
-    GEN["🆔 Generate UUID<br/>Create unique ID<br/>For approval request"]
+    Start --> PlanCheck
+    PlanCheck -->|NO/YES| Reviewed
+    Reviewed -->|YES| ApprovalReq --> Approved
+    Approved -->|YES| Validate --> Done
+    Approved -->|NO| Start
 
-    HAS_AA{Has<br/>approvedAt?}
-
-    HAS_AR{Has<br/>approvalRequestId?}
-
-    KEEP["♻️ Keep existing<br/>Use prior request<br/>Maintain continuity"]
-
-    SET_AR["🔗 Set approvalRequestId<br/>Assign new UUID<br/>Link to approval system"]
-
-    NEED["🔔 needs_approval<br/>Derived state<br/>Desktop UI shows prompt"]
-
-    RV --> GEN
-    GEN --> HAS_AA
-    HAS_AA -->|yes| KEEP
-    HAS_AA -->|no| HAS_AR
-    HAS_AR -->|yes| KEEP
-    HAS_AR -->|no| SET_AR
-    SET_AR --> NEED
-    KEEP --> NEED`,
+    style Start fill:#e1f5ff
+    style Done fill:#c8e6c9
+    style Validate click flowStartValidation "View validation"`,
   nodes: [
-    { id: 'RV', label: 'Set to reviewed' },
-    { id: 'GEN', label: 'Generate UUID' },
-    { id: 'HAS_AA', label: 'Has approvedAt?' },
-    { id: 'HAS_AR', label: 'Has approvalRequestId?' },
-    { id: 'KEEP', label: 'Keep existing' },
-    { id: 'SET_AR', label: 'Set approvalRequestId' },
-    { id: 'NEED', label: 'needs_approval' },
+    { id: 'Start', label: 'User Creates Task' },
+    { id: 'PlanCheck', label: 'Has Plan?' },
+    { id: 'Reviewed', label: 'Status Reviewed?' },
+    { id: 'ApprovalReq', label: 'Create Approval Request' },
+    { id: 'Approved', label: 'Human Approves?' },
+    { id: 'Validate', label: 'Validate & Execute', drillDownId: 'logic-start-validation' },
+    { id: 'Done', label: 'Task Done' },
   ],
 };
+
+const logicGoalLifecycle: Diagram = {
+  id: 'logic-goal-lifecycle',
+  lens: 'logic',
+  title: 'Goal Lifecycle: Creation to Completion',
+  parentId: 'logic-l0',
+  mermaid: `flowchart TD
+    Start([👤 Create Goal<br/>mode=developing])
+    TaskCheck{📝 Add<br/>Tasks?}
+    ApprovalOK{✅ Tasks<br/>Approved?}
+    Execute["▶️ Execute Tasks<br/>mode=active"]
+    AllDone{✔️ All<br/>Done?}
+    Complete["🏁 Goal Done<br/>mode=done"]
+
+    Start --> TaskCheck
+    TaskCheck -->|YES| ApprovalOK
+    ApprovalOK -->|YES| Execute --> AllDone
+    AllDone -->|YES| Complete
+    AllDone -->|NO| Execute
+
+    style Start fill:#e1f5ff
+    style Complete fill:#c8e6c9`,
+  nodes: [
+    { id: 'Start', label: 'Create Goal' },
+    { id: 'TaskCheck', label: 'Add Tasks?' },
+    { id: 'ApprovalOK', label: 'Tasks Approved?' },
+    { id: 'Execute', label: 'Execute Tasks' },
+    { id: 'AllDone', label: 'All Done?' },
+    { id: 'Complete', label: 'Goal Done' },
+  ],
+};
+
+const logicApprovalGate: Diagram = {
+  id: 'logic-approval-gate',
+  lens: 'logic',
+  title: 'Approval Gate: Request to Decision',
+  parentId: 'logic-task-lifecycle',
+  mermaid: `flowchart TD
+    Start([📤 Approval<br/>Requested])
+    GenUUID["🔑 Gen UUID<br/>approvalRequestId"]
+    Wait["⏳ Await<br/>Decision"]
+    Decision{👤 Approve<br/>or Deny?}
+    Approve["✅ Approved<br/>Set approvedAt"]
+    Deny["❌ Denied<br/>Set reason"]
+
+    Start --> GenUUID --> Wait --> Decision
+    Decision -->|APPROVE| Approve
+    Decision -->|DENY| Deny
+
+    style Start fill:#fff3e0
+    style Approve fill:#c8e6c9
+    style Deny fill:#ffcdd2`,
+  nodes: [
+    { id: 'Start', label: 'Approval Requested' },
+    { id: 'GenUUID', label: 'Gen UUID' },
+    { id: 'Wait', label: 'Await Decision' },
+    { id: 'Decision', label: 'Approve or Deny?' },
+    { id: 'Approve', label: 'Approved' },
+    { id: 'Deny', label: 'Denied' },
+  ],
+};
+
+const logicStartValidation: Diagram = {
+  id: 'logic-start-validation',
+  lens: 'logic',
+  title: 'Start Validation: Pre-Execution Checks',
+  parentId: 'logic-task-lifecycle',
+  mermaid: `flowchart TD
+    Start([▶️ Start<br/>Request])
+    Exists{Task<br/>Valid?}
+    Error["❌ Error<br/>Invalid state"]
+    Approved{Approved<br/>?}
+    RequestApprove["📤 Request<br/>Approval"]
+    Launch["🚀 Execute<br/>Agent"]
+
+    Start --> Exists
+    Exists -->|NO| Error
+    Exists -->|YES| Approved
+    Approved -->|NO| RequestApprove
+    Approved -->|YES| Launch
+
+    style Start fill:#e3f2fd
+    style Launch fill:#c8e6c9
+    style Error fill:#ffcdd2`,
+  nodes: [
+    { id: 'Start', label: 'Start Request' },
+    { id: 'Exists', label: 'Task Valid?' },
+    { id: 'Error', label: 'Error' },
+    { id: 'Approved', label: 'Approved?' },
+    { id: 'RequestApprove', label: 'Request Approval', drillDownId: 'logic-approval-gate' },
+    { id: 'Launch', label: 'Execute Agent' },
+  ],
+};
+
+const logicPlanPersistence: Diagram = {
+  id: 'logic-plan-persistence',
+  lens: 'logic',
+  title: 'Plan Persistence: File Creation & Storage',
+  parentId: 'logic-task-lifecycle',
+  mermaid: `flowchart TD
+    Start([📝 Plan<br/>Update])
+    ContentCheck{Content<br/>Provided?}
+    Generate["🤖 Gen<br/>Template"]
+    Normalize["🔧 Normalize<br/>Content"]
+    CreateFile["💾 Write<br/>PLAN.md"]
+    UpdateDB["🗄️ Update<br/>Database"]
+    Success["✅ Success"]
+
+    Start --> ContentCheck
+    ContentCheck -->|NO| Generate --> CreateFile
+    ContentCheck -->|YES| Normalize --> CreateFile
+    CreateFile --> UpdateDB --> Success
+
+    style Start fill:#f3e5f5
+    style Success fill:#c8e6c9`,
+  nodes: [
+    { id: 'Start', label: 'Plan Update' },
+    { id: 'ContentCheck', label: 'Content Provided?' },
+    { id: 'Generate', label: 'Gen Template' },
+    { id: 'Normalize', label: 'Normalize Content' },
+    { id: 'CreateFile', label: 'Write PLAN.md' },
+    { id: 'UpdateDB', label: 'Update Database' },
+    { id: 'Success', label: 'Success' },
+  ],
+};
+
+const logicStatusTransitions: Diagram = {
+  id: 'logic-status-transitions',
+  lens: 'logic',
+  title: 'Status Transitions: Validation & Side Effects',
+  parentId: 'logic-task-lifecycle',
+  mermaid: `flowchart TD
+    Start([🔄 Status<br/>Change])
+    Validate{Valid<br/>Transition?}
+    Error["❌ Error<br/>Invalid"]
+    Approved{Target<br/>Requires<br/>Approval?}
+    CheckApproval{Has<br/>approvedAt?}
+    Downgrade["⬇️ Downgrade"]
+    Apply["✅ Apply"]
+
+    Start --> Validate
+    Validate -->|NO| Error
+    Validate -->|YES| Approved
+    Approved -->|YES| CheckApproval
+    Approved -->|NO| Apply
+    CheckApproval -->|YES| Apply
+    CheckApproval -->|NO| Downgrade --> Apply
+
+    style Start fill:#eceff1
+    style Apply fill:#c8e6c9
+    style Error fill:#ffcdd2`,
+  nodes: [
+    { id: 'Start', label: 'Status Change' },
+    { id: 'Validate', label: 'Valid Transition?' },
+    { id: 'Error', label: 'Error' },
+    { id: 'Approved', label: 'Target Requires Approval?' },
+    { id: 'CheckApproval', label: 'Has approvedAt?' },
+    { id: 'Downgrade', label: 'Downgrade' },
+    { id: 'Apply', label: 'Apply' },
+  ],
+};
+
 
 // ══════════════════════════════════════════════════════════════════
 // STATE LENS: What changes over time?
@@ -554,7 +648,7 @@ const stateL0: Diagram = {
   nodes: [
     { id: 'SE', label: 'Session', drillDownId: 'state-session' },
     { id: 'CX', label: 'Context Window', drillDownId: 'state-context' },
-    { id: 'GT', label: 'Goals & Tasks', drillDownId: 'state-goals-tasks' },
+    { id: 'GT', label: 'Goals & Tasks' },
     { id: 'AG', label: 'Agent Run' },
   ],
 };
@@ -684,93 +778,7 @@ const stateGoal: Diagram = {
   ],
 };
 
-const stateGoalsTasks: Diagram = {
-  id: 'state-goals-tasks',
-  lens: 'state',
-  title: 'Goals & Tasks State Machines',
-  mermaid: `flowchart TD
-    GH["💤 Holding<br/>Not started<br/>Waiting or on-hold"]
-    GD["🔬 Developing<br/>Exploring<br/>Research and planning"]
-    GA["✔️ Active<br/>Executing<br/>Tasks running"]
-    GC["🔄 Checking<br/>Verifying<br/>Validation pass"]
-    GDN["✅ Done<br/>Complete<br/>Objective met"]
 
-    TDR["📝 Draft<br/>Plan written<br/>Needs review"]
-    TRV["📋 Reviewed<br/>Submitted<br/>Awaiting approval"]
-    TAP["✔️ Approved<br/>Cleared<br/>Ready to run"]
-    TRN["🏃 Running<br/>Executing<br/>Implementation"]
-    TDN["✅ Done<br/>Complete<br/>Result recorded"]
-
-    GH -->|develop| GD
-    GD -->|approve| GA
-    GA -->|check| GC
-    GC -->|verify| GDN
-
-    TDR -->|submit| TRV
-    TRV -->|approve| TAP
-    TAP -->|start| TRN
-    TRN -->|finish| TDN`,
-  nodes: [
-    { id: 'GH', label: 'Holding' },
-    { id: 'GD', label: 'Developing' },
-    { id: 'GA', label: 'Active' },
-    { id: 'GC', label: 'Checking' },
-    { id: 'GDN', label: 'Done' },
-    { id: 'TDR', label: 'Draft', drillDownId: 'state-task-details' },
-    { id: 'TRV', label: 'Reviewed' },
-    { id: 'TAP', label: 'Approved' },
-  ],
-};
-
-const stateTaskDetails: Diagram = {
-  id: 'state-task-details',
-  lens: 'state',
-  title: 'Task State Details',
-  parentId: 'state-goals-tasks',
-  mermaid: `flowchart TD
-    DR["📝 Draft<br/>Plan being written<br/>No approvalRequestId yet"]
-
-    RV["📋 Reviewed<br/>Plan submitted<br/>Awaiting decision"]
-
-    NA{Has<br/>approvalRequestId?}
-    DN{Has<br/>denialReason?}
-    AP{Has<br/>approvedAt?}
-
-    NEED["🔔 needs_approval<br/>Derived state<br/>Waiting for human"]
-    DENI["❌ denied<br/>Derived state<br/>Human rejected"]
-    APPR["✅ approved<br/>Derived state<br/>Cleared to run"]
-
-    RDY["🎯 ready<br/>Derived state<br/>Can transition to running"]
-
-    RUN["🏃 Running<br/>Agent executing<br/>Implementation in progress"]
-    CHECK["🔍 Checking<br/>Optional verification<br/>Another agent validates"]
-    DONE["✅ Done<br/>Complete<br/>Result recorded"]
-
-    DR -->|plan written| RV
-    RV -->|check approval| NA
-
-    NA -->|yes| NEED
-    NA -->|no| DN
-    DN -->|yes| DENI
-    DN -->|no| AP
-    AP -->|yes| APPR
-    APPR -->|transition| RDY
-
-    RDY -->|agent starts| RUN
-    RUN -->|needs verify| CHECK
-    RUN -->|finished| DONE
-    CHECK -->|verified| DONE`,
-  nodes: [
-    { id: 'DR', label: 'Draft' },
-    { id: 'RV', label: 'Reviewed' },
-    { id: 'NA', label: 'Has approvalRequestId?' },
-    { id: 'DN', label: 'Has denialReason?' },
-    { id: 'AP', label: 'Has approvedAt?' },
-    { id: 'NEED', label: 'needs_approval' },
-    { id: 'RUN', label: 'Running' },
-    { id: 'DONE', label: 'Done' },
-  ],
-};
 
 // ══════════════════════════════════════════════════════════════════
 // Export all diagrams
@@ -783,8 +791,6 @@ export const ALL_DIAGRAMS: Diagram[] = [
   structureChannels,
   structureAgents,
   structureTools,
-  structureGoalsTasks,
-  structureTaskTool,
   // Time
   timeL0,
   timeInbound,
@@ -796,15 +802,18 @@ export const ALL_DIAGRAMS: Diagram[] = [
   logicPermissions,
   logicAgentSelection,
   logicTaskValidation,
-  logicApprovalFlow,
+  logicTaskLifecycle,
+  logicGoalLifecycle,
+  logicApprovalGate,
+  logicStartValidation,
+  logicPlanPersistence,
+  logicStatusTransitions,
   // State
   stateL0,
   stateSession,
   stateContext,
   stateTask,
   stateGoal,
-  stateGoalsTasks,
-  stateTaskDetails,
 ];
 
 /** Root diagram ID for each lens */
