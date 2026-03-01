@@ -1615,7 +1615,7 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
     if (config.autonomy === 'autonomous') {
       const existing = scheduler.listItems().find(i => i.id === AUTONOMOUS_SCHEDULE_ID);
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      const desired = buildAutonomousCalendarItem(tz);
+      const desired = buildAutonomousCalendarItem(tz, undefined, config.pulseSchedule);
       if (!existing) {
         scheduler.addItem({ ...desired, id: AUTONOMOUS_SCHEDULE_ID });
         console.log('[gateway] created autonomy pulse schedule on startup');
@@ -5051,12 +5051,12 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
               const existing = scheduler.listItems().find(i => i.id === AUTONOMOUS_SCHEDULE_ID);
               if (value === 'autonomous' && !existing) {
                 const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                const item = buildAutonomousCalendarItem(tz);
+                const item = buildAutonomousCalendarItem(tz, undefined, config.pulseSchedule);
                 scheduler.addItem({ ...item, id: AUTONOMOUS_SCHEDULE_ID });
                 console.log('[gateway] created autonomy pulse schedule');
               } else if (value === 'autonomous' && existing) {
                 const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                const desired = buildAutonomousCalendarItem(tz);
+                const desired = buildAutonomousCalendarItem(tz, undefined, config.pulseSchedule);
                 scheduler.updateItem(AUTONOMOUS_SCHEDULE_ID, {
                   summary: desired.summary,
                   description: desired.description,

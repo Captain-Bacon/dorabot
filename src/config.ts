@@ -57,6 +57,13 @@ export type CalendarConfig = {
   tickIntervalMs?: number;
 };
 
+export type PulseScheduleConfig = {
+  timezone?: string;
+  workingHours?: { start: number; end: number };  // hour of day (0-23)
+  offPeakHours?: { start: number; end: number };  // hour of day (0-23)
+  // overnight is implied: anything outside working + off-peak
+};
+
 export type WhatsAppChannelConfig = {
   enabled?: boolean;
   authDir?: string;
@@ -164,6 +171,7 @@ export type Config = {
   sandbox: SandboxSettings;
   cron?: CronConfig;
   calendar?: CalendarConfig;
+  pulseSchedule?: PulseScheduleConfig;
   channels?: ChannelsConfig;
   gateway?: GatewayConfig;
   browser?: BrowserConfig;

@@ -1,6 +1,10 @@
 import { getTodayMemoryDir, MEMORIES_DIR, WORKSPACE_DIR, RESEARCH_SKILL_PATH } from './workspace.js';
+import { DateTime } from 'luxon';
+import type { PulseScheduleConfig } from './config.js';
 
 export const AUTONOMOUS_SCHEDULE_ID = 'autonomy-pulse';
+
+export type PulseMode = 'working' | 'offpeak' | 'overnight';
 
 const INTERVAL_TO_RRULE: Record<string, string> = {
   '15m': 'FREQ=MINUTELY;INTERVAL=15',
@@ -22,18 +26,47 @@ export function rruleToPulseInterval(rrule: string): string {
   return DEFAULT_PULSE_INTERVAL;
 }
 
-export function buildAutonomousPrompt(timezone?: string): string {
-  const todayDir = getTodayMemoryDir(timezone);
+export function detectPulseMode(scheduleConfig?: PulseScheduleConfig, timezone?: string): PulseMode {
+  const tz = timezone || scheduleConfig?.timezone || 'UTC';
+  const now = DateTime.now().setZone(tz);
+  const hour = now.hour;
 
-  return `Autonomous pulse. Fresh session. Memory files are your only continuity.
+  const workingStart = scheduleConfig?.workingHours?.start ?? 9;
+  const workingEnd = scheduleConfig?.workingHours?.end ?? 18;
+  const offPeakStart = scheduleConfig?.offPeakHours?.start ?? 18;
+  const offPeakEnd = scheduleConfig?.offPeakHours?.end ?? 23;
+
+  // Working hours (default 9am-6pm)
+  if (hour >= workingStart && hour < workingEnd) {
+    return 'working';
+  }
+
+  // Off-peak (default 6pm-11pm)
+  if (hour >= offPeakStart && hour < offPeakEnd) {
+    return 'offpeak';
+  }
+
+  // Overnight (default 11pm-9am)
+  return 'overnight';
+}
+
+export function buildAutonomousPrompt(timezone?: string, scheduleConfig?: PulseScheduleConfig): string {
+  const todayDir = getTodayMemoryDir(timezone);
+  const mode = detectPulseMode(scheduleConfig, timezone);
+
+  const baseBootstrap = `Autonomous pulse (${mode} mode). Fresh session. Memory files are your only continuity.
 
 ## Bootstrap
 
 1. Read ${todayDir}/MEMORY.md if it exists (what you've already done today).
 2. Check goals and tasks (goals_view, tasks_view).
-3. If creating research output, check ${RESEARCH_SKILL_PATH} first.
+3. If creating research output, check ${RESEARCH_SKILL_PATH} first.`;
 
-## Priority (strict order)
+  let priorities: string;
+
+  if (mode === 'working') {
+    // Full engagement: all 10 priorities
+    priorities = `## Priority (strict order)
 
 1. **Advance in_progress tasks.** Execute the next concrete step. Use the browser, run commands, write code, whatever it takes. Keep tasks_update current.
 2. **Act on monitored things.** Check prices, deployments, PRs, tracking pages. Live browser checks, not assumptions. If state changed, act or notify.
@@ -46,7 +79,30 @@ export function buildAutonomousPrompt(timezone?: string): string {
 9. **Create momentum.** Break large tasks into smaller follow-up tasks and queue them.
 10. **Spot gaps and opportunities.** You have a third-party perspective the owner doesn't. If you notice something that would improve the dorabot ecosystem (UI polish, missing functionality, backend improvements, UX friction, useful integrations, or anything else), raise it. Create a goal in developing mode, send a message explaining what you spotted and why it matters. The owner gets blinkered. You see fresh each pulse. Use that.
 
-Do at least one meaningful action every pulse. Do not end without a concrete next action.
+Do at least one meaningful action every pulse. Do not end without a concrete next action.`;
+  } else if (mode === 'offpeak') {
+    // Reduced engagement: focus on tasks and critical monitoring
+    priorities = `## Priority (strict order)
+
+1. **Advance in_progress tasks.** Execute the next concrete step. Keep tasks_update current.
+2. **Act on monitored things.** Check critical items (deployments, breaking changes). Live browser checks if needed.
+3. **Follow up with the owner.** If you asked something and they answered (check journal), incorporate it.
+4. **Handle blockers.** Critical blockers only. Document non-urgent issues for working hours.
+5. **Research or prepare.** If a task needs info, gather it. Store via research_add/research_update.
+
+Off-peak mode: focus on advancing existing work. Avoid new proposals unless genuinely urgent.`;
+  } else {
+    // Overnight: minimal monitoring only
+    priorities = `## Priority (strict order)
+
+1. **Advance approved tasks.** If tasks are approved and ready (tasks_view filter: 'approved'), execute them.
+2. **Monitor critical items.** Check for failures, breaking changes, or urgent issues that can't wait.
+3. **Handle emergencies.** Respond to critical blockers or urgent owner messages only.
+
+Overnight mode: minimal activity. Most work waits for working hours. No engagement, no proposals, no new goals.`;
+  }
+
+  const afterActing = `
 
 ## After acting
 
@@ -54,14 +110,24 @@ Do at least one meaningful action every pulse. Do not end without a concrete nex
 - Real findings → research_add (not memory files). Include source links.
 - Stable facts changed → update ${WORKSPACE_DIR}/MEMORY.md.
 - Created/updated goals, tasks, or research → message the owner (what changed, why, suggested next action).
-- Urgent → message them.
+- Urgent → message them.`;
+
+  const boundaries = mode === 'overnight'
+    ? `
+
+## Boundaries
+
+Overnight mode: most things can wait. "Nothing to act on" is normal and expected. Only act on genuine emergencies or approved tasks.`
+    : `
 
 ## Boundaries
 
 Stay focused. Before declaring "nothing to act on", verify: goals checked, tasks checked, monitoring checked, follow-ups checked, new tasks considered. Log why none were actionable. "Nothing to act on" should be rare.`;
+
+  return baseBootstrap + '\n\n' + priorities + afterActing + boundaries;
 }
 
-export function buildAutonomousCalendarItem(timezone?: string, interval?: string) {
+export function buildAutonomousCalendarItem(timezone?: string, interval?: string, scheduleConfig?: PulseScheduleConfig) {
   return {
     type: 'event' as const,
     summary: 'Autonomy pulse',
@@ -69,7 +135,7 @@ export function buildAutonomousCalendarItem(timezone?: string, interval?: string
     dtstart: new Date().toISOString(),
     rrule: pulseIntervalToRrule(interval || DEFAULT_PULSE_INTERVAL),
     timezone,
-    message: buildAutonomousPrompt(timezone),
+    message: buildAutonomousPrompt(timezone, scheduleConfig),
     session: 'main' as const,
     enabled: true,
     deleteAfterRun: false,
