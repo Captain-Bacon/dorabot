@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { ShieldCheck, Play, RotateCcw, CircleSlash, AlertTriangle, X, FileText } from 'lucide-react';
+import { ShieldCheck, Play, RotateCcw, CircleSlash, AlertTriangle, X, FileText, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import type { Task, Goal } from './helpers';
@@ -16,6 +16,8 @@ type Props = {
   onTaskClick: (task: Task) => void;
   onViewPlan: (task: Task) => void;
   onUnblock: (taskId: string) => void;
+  onMarkDone?: (taskId: string) => void;
+  onRequestRevision?: (taskId: string, reason?: string) => void;
   busy?: string | null;
 };
 
@@ -27,17 +29,21 @@ type AttentionGroup = {
   tasks: Task[];
 };
 
-export function AttentionSection({ tasks, goals, taskRuns, onApprove, onDeny, onStart, onTaskClick, onViewPlan, onUnblock, busy }: Props) {
+export function AttentionSection({ tasks, goals, taskRuns, onApprove, onDeny, onStart, onTaskClick, onViewPlan, onUnblock, onMarkDone, onRequestRevision, busy }: Props) {
   const [denyingId, setDenyingId] = useState<string | null>(null);
   const [denyReason, setDenyReason] = useState('');
+  const [revisingId, setRevisingId] = useState<string | null>(null);
+  const [revisionReason, setRevisionReason] = useState('');
 
   const groups = useMemo(() => {
+    const checking = tasks.filter(t => t.status === 'checking');
     const pending = tasks.filter(t => t.status === 'reviewed' && !!t.approvalRequestId);
     const ready = tasks.filter(t => (t.status === 'approved') || (t.status === 'reviewed' && !t.approvalRequestId && !!t.approvedAt));
     const denied = tasks.filter(t => t.status === 'reviewed' && !!t.reason && /denied/i.test(t.reason));
     const blocked = tasks.filter(t => t.status === 'blocked');
 
     const result: AttentionGroup[] = [];
+    if (checking.length > 0) result.push({ key: 'verify', label: 'Verify completed work', icon: <CheckCircle2 className="h-3 w-3" />, iconClass: 'text-violet-500', tasks: checking });
     if (pending.length > 0) result.push({ key: 'approve', label: 'Approve', icon: <ShieldCheck className="h-3 w-3" />, iconClass: 'text-amber-500', tasks: pending });
     if (ready.length > 0) result.push({ key: 'start', label: 'Ready to start', icon: <Play className="h-3 w-3" />, iconClass: 'text-emerald-500', tasks: ready });
     if (denied.length > 0) result.push({ key: 'revise', label: 'Needs revision', icon: <RotateCcw className="h-3 w-3" />, iconClass: 'text-destructive', tasks: denied });
@@ -158,8 +164,81 @@ export function AttentionSection({ tasks, goals, taskRuns, onApprove, onDeny, on
                             Unblock
                           </Button>
                         )}
+                        {group.key === 'verify' && onMarkDone && onRequestRevision && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-[10px] text-destructive hover:bg-destructive/10"
+                              disabled={isBusy}
+                              onClick={() => {
+                                if (revisingId === task.id) {
+                                  onRequestRevision(task.id, revisionReason.trim() || undefined);
+                                  setRevisingId(null);
+                                  setRevisionReason('');
+                                } else {
+                                  setRevisingId(task.id);
+                                  setRevisionReason('');
+                                }
+                              }}
+                            >
+                              <RotateCcw className="mr-1 h-2.5 w-2.5" />
+                              Needs Work
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-[10px] text-emerald-500 hover:bg-emerald-500/10"
+                              disabled={isBusy}
+                              onClick={() => onMarkDone(task.id)}
+                            >
+                              <CheckCircle2 className="mr-1 h-2.5 w-2.5" />
+                              Done
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
+                    {group.key === 'verify' && task.result && (
+                      <div className="mt-1 ml-2 px-2 py-1.5 rounded bg-muted/30 border border-border/30">
+                        <div className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground/70 mb-0.5">Result</div>
+                        <div className="text-xs text-foreground/80 whitespace-pre-wrap">{task.result}</div>
+                      </div>
+                    )}
+                    {revisingId === task.id && (
+                      <div className="mt-1 ml-2 flex items-end gap-2 pb-1">
+                        <Textarea
+                          value={revisionReason}
+                          onChange={e => setRevisionReason(e.target.value)}
+                          placeholder="What needs to be fixed? (optional)"
+                          className="min-h-[40px] text-xs"
+                          autoFocus
+                          onKeyDown={e => {
+                            if (e.key === 'Escape') { setRevisingId(null); setRevisionReason(''); }
+                            if (e.key === 'Enter' && e.metaKey && onRequestRevision) {
+                              onRequestRevision(task.id, revisionReason.trim() || undefined);
+                              setRevisingId(null);
+                              setRevisionReason('');
+                            }
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 text-[10px]"
+                          disabled={isBusy}
+                          onClick={() => {
+                            if (onRequestRevision) {
+                              onRequestRevision(task.id, revisionReason.trim() || undefined);
+                              setRevisingId(null);
+                              setRevisionReason('');
+                            }
+                          }}
+                        >
+                          Request
+                        </Button>
+                      </div>
+                    )}
                     {denyingId === task.id && (
                       <div className="mt-1 ml-2 flex items-end gap-2 pb-1">
                         <Textarea

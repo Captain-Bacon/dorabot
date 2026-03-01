@@ -194,6 +194,26 @@ export function GoalsView({ gateway, onViewSession, onSetupChat }: Props) {
     });
   }, [gateway, wrap]);
 
+  const markDone = useCallback((taskId: string) => {
+    void wrap(`task:${taskId}:done`, async () => {
+      await gateway.rpc('tasks.done', { id: taskId });
+      const task = tasks.find(t => t.id === taskId);
+      toast.success(`Marked done: ${task?.title || taskId}`);
+    });
+  }, [gateway, wrap, tasks]);
+
+  const requestRevision = useCallback((taskId: string, reason?: string) => {
+    void wrap(`task:${taskId}:revision`, async () => {
+      await gateway.rpc('tasks.update', {
+        id: taskId,
+        status: 'approved',
+        reason: reason || 'Needs revision based on verification',
+      });
+      const task = tasks.find(t => t.id === taskId);
+      toast.success(`Revision requested: ${task?.title || taskId}`, reason ? { description: reason } : undefined);
+    });
+  }, [gateway, wrap, tasks]);
+
   const saveTask = useCallback((taskId: string, updates: { title: string; goalId: string; reason: string; result: string }) => {
     void wrap(`task:${taskId}:save`, async () => {
       await gateway.rpc('tasks.update', { id: taskId, ...updates });
@@ -334,6 +354,8 @@ Look at this goal holistically. What's the situation? Is the goal actually met? 
             onTaskClick={openTaskDetail}
             onViewPlan={openPlan}
             onUnblock={unblockTask}
+            onMarkDone={markDone}
+            onRequestRevision={requestRevision}
             busy={saving}
           />
 
