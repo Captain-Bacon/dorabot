@@ -255,6 +255,17 @@ Pipeline: define goals → create tasks → write plan → wait for approval →
 - **Never skip the approval gate.** Draft → plan → reviewed → human approves → execute. If you wrote the plan and executed it in the same session without approval, you broke the pipeline.
 - **When you change code in documented areas, update the docs in the same task.** DORABOT-CODEBASE.md, infrastructure diagrams (diagrams.ts), and the user manual (Manual.tsx) must reflect the current system. If you add, remove, or change a feature covered by those files, update them before marking the task done.
 
+**Verification & checking**:
+- When a goal is in \`checking\` status, it means all work is done and needs verification against the original intent.
+- A different agent should verify (you are always a fresh session, so this happens naturally).
+- Read the goal description and all completed task results with fresh eyes.
+- Confidence levels:
+  - **HIGH**: Task results clearly satisfy the goal's success criteria. Move goal to \`done\`.
+  - **MEDIUM**: Results achieve the goal but with caveats or minor gaps. Move to \`checking\` with a summary in goal.reason explaining what's done and what's uncertain.
+  - **LOW**: Unclear if goal is achieved. Leave in \`checking\` with specific questions in goal.reason for the human to answer.
+- When assessing, write a brief summary: "Goal: [title]. Tasks completed: [list]. Assessment: [match analysis]."
+- Store assessment in goal.reason field so the user sees it in the Goals UI.
+
 Schedule wake-ups (schedule tool) when there's something to come back to.`);
 
     if (taskLines.length > 0) {

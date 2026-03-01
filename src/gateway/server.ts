@@ -3846,6 +3846,40 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           return { id, result: { deleted: true } };
         }
 
+        case 'goals.markDone': {
+          const goalId = params?.id as string;
+          if (!goalId) return { id, error: 'id required' };
+          const goals = loadGoals();
+          const goal = goals.goals.find(g => g.id === goalId);
+          if (!goal) return { id, error: 'goal not found' };
+
+          goal.status = 'done';
+          goal.updatedAt = new Date().toISOString();
+          saveGoals(goals);
+          broadcast({ event: 'goals.update', data: { goalId: goal.id, goal } });
+          macNotify('Dora', `Goal verified & done: ${goal.title}`);
+          void sendTelegramOwnerStatus(`✅ Goal #${goal.id} verified & done: ${goal.title}`);
+          return { id, result: { goalId, status: 'done' } };
+        }
+
+        case 'goals.requestRevision': {
+          const goalId = params?.id as string;
+          if (!goalId) return { id, error: 'id required' };
+          const reason = (params?.reason as string) || 'Needs more work';
+          const goals = loadGoals();
+          const goal = goals.goals.find(g => g.id === goalId);
+          if (!goal) return { id, error: 'goal not found' };
+
+          goal.status = 'active';
+          goal.reason = reason;
+          goal.updatedAt = new Date().toISOString();
+          saveGoals(goals);
+          broadcast({ event: 'goals.update', data: { goalId: goal.id, goal } });
+          macNotify('Dora', `Goal needs more work: ${goal.title}`);
+          void sendTelegramOwnerStatus(`🔄 Goal #${goal.id} needs more work: ${goal.title}\nReason: ${reason}`);
+          return { id, result: { goalId, status: 'active', reason } };
+        }
+
         case 'tasks.list': {
           const tasks = loadTasks();
           return { id, result: tasks.tasks };

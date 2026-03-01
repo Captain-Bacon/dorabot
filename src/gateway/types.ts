@@ -113,6 +113,8 @@ export type RpcMethod =
   | 'goals.add'
   | 'goals.update'
   | 'goals.delete'
+  | 'goals.markDone'
+  | 'goals.requestRevision'
   | 'tasks.list'
   | 'tasks.add'
   | 'tasks.update'

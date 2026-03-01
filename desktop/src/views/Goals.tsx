@@ -253,6 +253,22 @@ export function GoalsView({ gateway, onViewSession, onSetupChat }: Props) {
     });
   }, [gateway, wrap]);
 
+  const markGoalDone = useCallback((goalId: string) => {
+    void wrap(`goal:${goalId}`, async () => {
+      await gateway.rpc('goals.markDone', { id: goalId });
+      const goal = goals.find(g => g.id === goalId);
+      toast.success(`Verified & done: ${goal?.title || goalId}`);
+    });
+  }, [gateway, wrap, goals]);
+
+  const requestGoalRevision = useCallback((goalId: string, reason?: string) => {
+    void wrap(`goal:${goalId}`, async () => {
+      await gateway.rpc('goals.requestRevision', { id: goalId, reason: reason || 'Needs more work' });
+      const goal = goals.find(g => g.id === goalId);
+      toast.success(`Revision requested: ${goal?.title || goalId}`, reason ? { description: reason } : undefined);
+    });
+  }, [gateway, wrap, goals]);
+
   const nudgeGoal = useCallback((goal: Goal) => {
     if (!onSetupChat) return;
     const taskSummary = tasks
@@ -347,6 +363,7 @@ Look at this goal holistically. What's the situation? Is the goal actually met? 
           <AttentionSection
             tasks={tasks}
             goals={goalsById}
+            allGoals={goals}
             taskRuns={taskRuns}
             onApprove={approveTask}
             onDeny={denyTask}
@@ -356,6 +373,8 @@ Look at this goal holistically. What's the situation? Is the goal actually met? 
             onUnblock={unblockTask}
             onMarkDone={markDone}
             onRequestRevision={requestRevision}
+            onMarkGoalDone={markGoalDone}
+            onRequestGoalRevision={requestGoalRevision}
             busy={saving}
           />
 

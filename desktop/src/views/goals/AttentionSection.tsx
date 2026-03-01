@@ -9,6 +9,7 @@ import type { TaskRun } from '../../hooks/useGateway';
 type Props = {
   tasks: Task[];
   goals: Map<string, Goal>;
+  allGoals?: Goal[];
   taskRuns: Record<string, TaskRun>;
   onApprove: (task: Task, autoStart?: boolean) => void;
   onDeny: (task: Task, reason?: string) => void;
@@ -18,8 +19,12 @@ type Props = {
   onUnblock: (taskId: string) => void;
   onMarkDone?: (taskId: string) => void;
   onRequestRevision?: (taskId: string, reason?: string) => void;
+  onMarkGoalDone?: (goalId: string) => void;
+  onRequestGoalRevision?: (goalId: string, reason?: string) => void;
   busy?: string | null;
 };
+
+type AttentionItem = { type: 'task'; item: Task } | { type: 'goal'; item: Goal };
 
 type AttentionGroup = {
   key: string;
@@ -27,33 +32,43 @@ type AttentionGroup = {
   icon: React.ReactNode;
   iconClass: string;
   tasks: Task[];
+  items?: AttentionItem[];
 };
 
-export function AttentionSection({ tasks, goals, taskRuns, onApprove, onDeny, onStart, onTaskClick, onViewPlan, onUnblock, onMarkDone, onRequestRevision, busy }: Props) {
+export function AttentionSection({ tasks, goals, allGoals, taskRuns, onApprove, onDeny, onStart, onTaskClick, onViewPlan, onUnblock, onMarkDone, onRequestRevision, onMarkGoalDone, onRequestGoalRevision, busy }: Props) {
   const [denyingId, setDenyingId] = useState<string | null>(null);
   const [denyReason, setDenyReason] = useState('');
   const [revisingId, setRevisingId] = useState<string | null>(null);
   const [revisionReason, setRevisionReason] = useState('');
+  const [goalRevisingId, setGoalRevisingId] = useState<string | null>(null);
+  const [goalRevisionReason, setGoalRevisionReason] = useState('');
 
   const groups = useMemo(() => {
-    const checking = tasks.filter(t => t.status === 'checking');
+    const checkingTasks = tasks.filter(t => t.status === 'checking');
+    const checkingGoals = (allGoals || []).filter(g => g.status === 'checking');
     const pending = tasks.filter(t => t.status === 'reviewed' && !!t.approvalRequestId);
     const ready = tasks.filter(t => (t.status === 'approved') || (t.status === 'reviewed' && !t.approvalRequestId && !!t.approvedAt));
     const denied = tasks.filter(t => t.status === 'reviewed' && !!t.reason && /denied/i.test(t.reason));
     const blocked = tasks.filter(t => t.status === 'blocked');
 
+    // Build combined verify items: goals first, then tasks
+    const verifyItems: AttentionItem[] = [
+      ...checkingGoals.map(g => ({ type: 'goal' as const, item: g })),
+      ...checkingTasks.map(t => ({ type: 'task' as const, item: t })),
+    ];
+
     const result: AttentionGroup[] = [];
-    if (checking.length > 0) result.push({ key: 'verify', label: 'Verify completed work', icon: <CheckCircle2 className="h-3 w-3" />, iconClass: 'text-violet-500', tasks: checking });
+    if (verifyItems.length > 0) result.push({ key: 'verify', label: 'Verify completed work', icon: <CheckCircle2 className="h-3 w-3" />, iconClass: 'text-violet-500', tasks: checkingTasks, items: verifyItems });
     if (pending.length > 0) result.push({ key: 'approve', label: 'Approve', icon: <ShieldCheck className="h-3 w-3" />, iconClass: 'text-amber-500', tasks: pending });
     if (ready.length > 0) result.push({ key: 'start', label: 'Ready to start', icon: <Play className="h-3 w-3" />, iconClass: 'text-emerald-500', tasks: ready });
     if (denied.length > 0) result.push({ key: 'revise', label: 'Needs revision', icon: <RotateCcw className="h-3 w-3" />, iconClass: 'text-destructive', tasks: denied });
     if (blocked.length > 0) result.push({ key: 'blocked', label: 'Blocked', icon: <CircleSlash className="h-3 w-3" />, iconClass: 'text-destructive', tasks: blocked });
     return result;
-  }, [tasks]);
+  }, [tasks, allGoals]);
 
   if (groups.length === 0) return null;
 
-  const total = groups.reduce((sum, g) => sum + g.tasks.length, 0);
+  const total = groups.reduce((sum, g) => (g.items ? g.items.length : g.tasks.length) + sum, 0);
 
   const handleDeny = (task: Task) => {
     if (denyingId === task.id) {
@@ -79,10 +94,107 @@ export function AttentionSection({ tasks, goals, taskRuns, onApprove, onDeny, on
           <div key={group.key} className="px-4 py-2">
             <div className={cn('flex items-center gap-1.5 text-[10px] font-medium mb-1.5', group.iconClass)}>
               {group.icon}
-              {group.label} ({group.tasks.length})
+              {group.label} ({group.items ? group.items.length : group.tasks.length})
             </div>
             <div className="space-y-0.5">
-              {group.tasks.map(task => {
+              {/* Render goal items in verify group */}
+              {group.key === 'verify' && group.items?.filter(i => i.type === 'goal').map(({ item: g }) => {
+                const goal = g as Goal;
+                const isGoalBusy = !!busy && busy === `goal:${goal.id}`;
+                return (
+                  <div key={`goal-${goal.id}`}>
+                    <div className="flex items-center gap-2 rounded px-2 py-1 hover:bg-muted/30 transition-colors">
+                      <div className="min-w-0 flex-1 text-left">
+                        <span className="text-[9px] font-medium text-violet-500 mr-1.5">GOAL</span>
+                        <span className="text-xs font-medium">{goal.title}</span>
+                      </div>
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        {onMarkGoalDone && onRequestGoalRevision && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-[10px] text-destructive hover:bg-destructive/10"
+                              disabled={isGoalBusy}
+                              onClick={() => {
+                                if (goalRevisingId === goal.id) {
+                                  onRequestGoalRevision(goal.id, goalRevisionReason.trim() || undefined);
+                                  setGoalRevisingId(null);
+                                  setGoalRevisionReason('');
+                                } else {
+                                  setGoalRevisingId(goal.id);
+                                  setGoalRevisionReason('');
+                                }
+                              }}
+                            >
+                              <RotateCcw className="mr-1 h-2.5 w-2.5" />
+                              Needs Work
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-[10px] text-emerald-500 hover:bg-emerald-500/10"
+                              disabled={isGoalBusy}
+                              onClick={() => onMarkGoalDone(goal.id)}
+                            >
+                              <CheckCircle2 className="mr-1 h-2.5 w-2.5" />
+                              Done
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    {goal.reason && (
+                      <div className="mt-1 ml-2 px-2 py-1.5 rounded bg-muted/30 border border-border/30">
+                        <div className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground/70 mb-0.5">Assessment</div>
+                        <div className="text-xs text-foreground/80 whitespace-pre-wrap">{goal.reason}</div>
+                      </div>
+                    )}
+                    {goal.description && !goal.reason && (
+                      <div className="mt-1 ml-2 px-2 py-1.5 rounded bg-muted/30 border border-border/30">
+                        <div className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground/70 mb-0.5">Goal</div>
+                        <div className="text-xs text-foreground/80 whitespace-pre-wrap">{goal.description}</div>
+                      </div>
+                    )}
+                    {goalRevisingId === goal.id && (
+                      <div className="mt-1 ml-2 flex items-end gap-2 pb-1">
+                        <Textarea
+                          value={goalRevisionReason}
+                          onChange={e => setGoalRevisionReason(e.target.value)}
+                          placeholder="What needs to be fixed? (optional)"
+                          className="min-h-[40px] text-xs"
+                          autoFocus
+                          onKeyDown={e => {
+                            if (e.key === 'Escape') { setGoalRevisingId(null); setGoalRevisionReason(''); }
+                            if (e.key === 'Enter' && e.metaKey && onRequestGoalRevision) {
+                              onRequestGoalRevision(goal.id, goalRevisionReason.trim() || undefined);
+                              setGoalRevisingId(null);
+                              setGoalRevisionReason('');
+                            }
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 text-[10px]"
+                          disabled={isGoalBusy}
+                          onClick={() => {
+                            if (onRequestGoalRevision) {
+                              onRequestGoalRevision(goal.id, goalRevisionReason.trim() || undefined);
+                              setGoalRevisingId(null);
+                              setGoalRevisionReason('');
+                            }
+                          }}
+                        >
+                          Request
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {/* Render task items */}
+              {(group.key === 'verify' ? group.items?.filter(i => i.type === 'task').map(i => (i.item as Task)) || [] : group.tasks).map(task => {
                 const goal = task.goalId ? goals.get(task.goalId) : null;
                 const isBusy = !!busy && busy.startsWith(`task:${task.id}:`);
                 return (
