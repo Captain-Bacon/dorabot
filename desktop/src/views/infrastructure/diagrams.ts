@@ -286,7 +286,23 @@ const timeCrossChannel: Diagram = {
 const logicL0: Diagram = {
   id: 'logic-l0',
   lens: 'logic',
+  title: 'System Logic Overview',
+  mermaid: `flowchart TD
+    MSG["📨 Message Routing<br/>Commands, Sessions, Permissions<br/>Agent selection and execution"]
+    TSK["📋 Tasks & Goals<br/>Lifecycle, Approval, Status<br/>Plan persistence and validation"]
+
+    MSG -.explore.-> TSK`,
+  nodes: [
+    { id: 'MSG', label: 'Message Routing', drillDownId: 'logic-message-routing' },
+    { id: 'TSK', label: 'Tasks & Goals', drillDownId: 'logic-task-lifecycle' },
+  ],
+};
+
+const logicMessageRouting: Diagram = {
+  id: 'logic-message-routing',
+  lens: 'logic',
   title: 'Message Routing Decisions',
+  parentId: 'logic-message-routing',
   mermaid: `flowchart TD
     MSG["📨 Incoming Message<br/>From any channel<br/>Text, voice, or media"]
     CMD{"🔍 Is Command?<br/>/clear /handoff /reset<br/>Direct handling, no agent"}
@@ -316,7 +332,7 @@ const logicCommands: Diagram = {
   id: 'logic-commands',
   lens: 'logic',
   title: 'Command Handling',
-  parentId: 'logic-l0',
+  parentId: 'logic-message-routing',
   mermaid: `flowchart TD
     IN["📨 Message Text<br/>First word check<br/>Starts with / ?"]
     CLR{"/clear or /reset<br/>Reset Session<br/>Clears SDK context, keeps DB history"}
@@ -345,7 +361,7 @@ const logicPermissions: Diagram = {
   id: 'logic-permissions',
   lens: 'logic',
   title: 'Permission System',
-  parentId: 'logic-l0',
+  parentId: 'logic-message-routing',
   mermaid: `flowchart TD
     TC["🔧 Tool Call<br/>Agent wants to use tool<br/>classifyToolCall() runs"]
     PM{"📋 Permission Mode<br/>acceptEdits?<br/>Auto-allows Write/Edit tools"}
@@ -375,7 +391,7 @@ const logicAgentSelection: Diagram = {
   id: 'logic-agent-selection',
   lens: 'logic',
   title: 'Agent Selection & Routing',
-  parentId: 'logic-l0',
+  parentId: 'logic-message-routing',
   mermaid: `flowchart TD
     IN["📨 Message Arrives<br/>With session context<br/>Ready for agent"]
     DEF["📦 Load Definitions<br/>getAllAgents()<br/>Built-in + custom, minus disabled"]
@@ -798,6 +814,7 @@ export const ALL_DIAGRAMS: Diagram[] = [
   timeCrossChannel,
   // Logic
   logicL0,
+  logicMessageRouting,
   logicCommands,
   logicPermissions,
   logicAgentSelection,
