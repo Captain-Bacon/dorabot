@@ -302,7 +302,7 @@ const logicMessageRouting: Diagram = {
   id: 'logic-message-routing',
   lens: 'logic',
   title: 'Message Routing Decisions',
-  parentId: 'logic-message-routing',
+  parentId: 'logic-l0',
   mermaid: `flowchart TD
     MSG["📨 Incoming Message<br/>From any channel<br/>Text, voice, or media"]
     CMD{"🔍 Is Command?<br/>/clear /handoff /reset<br/>Direct handling, no agent"}
