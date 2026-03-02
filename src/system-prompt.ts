@@ -255,22 +255,29 @@ Pipeline: define goals → create tasks → write plan → wait for approval →
 - **Never skip the approval gate.** Draft → plan → reviewed → human approves → execute. If you wrote the plan and executed it in the same session without approval, you broke the pipeline.
 - **When you change code in documented areas, update the docs in the same task.** DORABOT-CODEBASE.md, infrastructure diagrams (diagrams.ts), and the user manual (Manual.tsx) must reflect the current system. If you add, remove, or change a feature covered by those files, update them before marking the task done.
 
-**Task completion rules** (enforced by validation):
-- **Plan deliverables are promises.** If the plan says "build UI component X", deliver UI component X. Deviations from the plan move the task to \`checking\` for human review, not \`done\`.
-- **Audit, research, exploration, design, and discovery tasks must create follow-up tasks** for their recommendations before marking done. Finding work that needs doing, then not creating tasks for it, breaks the chain.
-- **Goals cannot be marked done** if they have tasks in \`checking\` status, incomplete tasks, or audit/research tasks with unactioned recommendations.
-- If the system blocks your completion, it tells you why. Address the issues, then try again.
+**Task completion: three-agent pipeline**:
+- **Agent A (executor)** picks up approved task, executes it, then hands off with tasks_done. NEVER marks done directly.
+- **tasks_done is a handoff, not completion.** Provide: result (what was accomplished), handoffSummary (files changed, where to verify). Status moves to \`checking\` automatically.
+- **Agent B (code verifier, pulse)** runs functional checks: builds pass? Tests pass? Files exist? Returns PASS/FAIL.
+- **Agent C (fit verifier, pulse)** checks plan compliance, goal alignment, forward momentum. Returns PASS/FAIL.
+- **If both pass**: verificationType determines next step. agent-verified: pulse marks done. human-verified: pulse adds summary, waits for human.
+- **If either fails**: task goes back to \`approved\` with failure reason. Fresh agent picks up fix.
 
-**Verification & checking**:
-- When a goal is in \`checking\` status, it means all work is done and needs verification against the original intent.
-- A different agent should verify (you are always a fresh session, so this happens naturally).
-- Read the goal description and all completed task results with fresh eyes.
+**Verification type** (set at task creation):
+- **agent-verified**: Pulse can close after all checks pass. For objectively testable work (files, tests, config).
+- **human-verified**: Requires human sign-off after agent checks. For UI, qualitative assessments, anything tests can't fully cover.
+- Default to agent-verified unless the plan explicitly requires human verification.
+- Specify verificationType in the plan when creating tasks. UI work, subjective quality → human. Backend with tests → agent.
+
+**Goal verification**:
+- When a goal is in \`checking\` status, all work is done and needs verification against original intent.
+- Read goal description and all completed task results with fresh eyes.
 - Confidence levels:
   - **HIGH**: Task results clearly satisfy the goal's success criteria. Move goal to \`done\`.
-  - **MEDIUM**: Results achieve the goal but with caveats or minor gaps. Move to \`checking\` with a summary in goal.reason explaining what's done and what's uncertain.
-  - **LOW**: Unclear if goal is achieved. Leave in \`checking\` with specific questions in goal.reason for the human to answer.
-- When assessing, write a brief summary: "Goal: [title]. Tasks completed: [list]. Assessment: [match analysis]."
-- Store assessment in goal.reason field so the user sees it in the Goals UI.
+  - **MEDIUM**: Results achieve the goal but with caveats or minor gaps. Add summary to goal.reason, leave in checking.
+  - **LOW**: Unclear if goal is achieved. Leave in \`checking\` with specific questions in goal.reason.
+- Write assessment: "Goal: [title]. Tasks completed: [list]. Assessment: [match analysis]."
+- Store in goal.reason field so user sees it in Goals UI.
 
 Schedule wake-ups (schedule tool) when there's something to come back to.`);
 

@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { ShieldCheck, Play, RotateCcw, CircleSlash, AlertTriangle, X, FileText, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { ShieldCheck, Play, RotateCcw, CircleSlash, AlertTriangle, X, FileText, CheckCircle2, ShieldAlert, User, Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import type { Task, Goal } from './helpers';
-import { isValidationBlock } from './helpers';
+import { isValidationBlock, getVerificationTypeBadge } from './helpers';
 import type { TaskRun } from '../../hooks/useGateway';
 
 type Props = {
@@ -215,6 +215,21 @@ export function AttentionSection({ tasks, goals, allGoals, taskRuns, onApprove, 
                         {goal && (
                           <span className="ml-2 text-[10px] text-muted-foreground/50">{goal.title}</span>
                         )}
+                        {group.key === 'verify' && task.verificationType && (
+                          <span className="ml-2 inline-flex items-center gap-0.5 text-[9px] font-medium">
+                            {task.verificationType === 'human' ? (
+                              <>
+                                <User className="h-2.5 w-2.5 text-amber-500" />
+                                <span className="text-amber-500">human</span>
+                              </>
+                            ) : (
+                              <>
+                                <Bot className="h-2.5 w-2.5 text-violet-500" />
+                                <span className="text-violet-500">agent</span>
+                              </>
+                            )}
+                          </span>
+                        )}
                       </button>
                       <div className="flex items-center gap-0.5 shrink-0">
                         {group.key === 'approve' && (
@@ -309,35 +324,41 @@ export function AttentionSection({ tasks, goals, allGoals, taskRuns, onApprove, 
                         )}
                         {group.key === 'verify' && onMarkDone && onRequestRevision && (
                           <>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 text-[10px] text-destructive hover:bg-destructive/10"
-                              disabled={isBusy}
-                              onClick={() => {
-                                if (revisingId === task.id) {
-                                  onRequestRevision(task.id, revisionReason.trim() || undefined);
-                                  setRevisingId(null);
-                                  setRevisionReason('');
-                                } else {
-                                  setRevisingId(task.id);
-                                  setRevisionReason('');
-                                }
-                              }}
-                            >
-                              <RotateCcw className="mr-1 h-2.5 w-2.5" />
-                              Needs Work
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 text-[10px] text-emerald-500 hover:bg-emerald-500/10"
-                              disabled={isBusy}
-                              onClick={() => onMarkDone(task.id)}
-                            >
-                              <CheckCircle2 className="mr-1 h-2.5 w-2.5" />
-                              Done
-                            </Button>
+                            {task.verificationType === 'human' ? (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 text-[10px] text-destructive hover:bg-destructive/10"
+                                  disabled={isBusy}
+                                  onClick={() => {
+                                    if (revisingId === task.id) {
+                                      onRequestRevision(task.id, revisionReason.trim() || undefined);
+                                      setRevisingId(null);
+                                      setRevisionReason('');
+                                    } else {
+                                      setRevisingId(task.id);
+                                      setRevisionReason('');
+                                    }
+                                  }}
+                                >
+                                  <RotateCcw className="mr-1 h-2.5 w-2.5" />
+                                  Needs Work
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 text-[10px] text-emerald-500 hover:bg-emerald-500/10"
+                                  disabled={isBusy}
+                                  onClick={() => onMarkDone(task.id)}
+                                >
+                                  <CheckCircle2 className="mr-1 h-2.5 w-2.5" />
+                                  Done
+                                </Button>
+                              </>
+                            ) : (
+                              <span className="text-[10px] text-muted-foreground italic">Awaiting pulse verification</span>
+                            )}
                           </>
                         )}
                       </div>
@@ -352,6 +373,12 @@ export function AttentionSection({ tasks, goals, allGoals, taskRuns, onApprove, 
                       <div className="mt-1 ml-2 px-2 py-1.5 rounded bg-muted/30 border border-border/30">
                         <div className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground/70 mb-0.5">Result</div>
                         <div className="text-xs text-foreground/80 whitespace-pre-wrap">{task.result}</div>
+                      </div>
+                    )}
+                    {group.key === 'verify' && task.verificationType === 'human' && task.reason && (
+                      <div className="mt-1 ml-2 px-2 py-1.5 rounded bg-violet-500/5 border border-violet-500/20">
+                        <div className="text-[9px] font-medium uppercase tracking-wide text-violet-500/70 mb-0.5">Agent Verification Summary</div>
+                        <div className="text-xs text-foreground/80 whitespace-pre-wrap">{task.reason}</div>
                       </div>
                     )}
                     {revisingId === task.id && (

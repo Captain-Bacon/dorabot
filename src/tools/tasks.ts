@@ -8,6 +8,7 @@ import { PLANS_DIR } from '../workspace.js';
 import { type TaskType, inferTaskType, validateTaskCompletion } from './task-validation.js';
 
 export type TaskStatus = 'draft' | 'reviewed' | 'approved' | 'running' | 'checking' | 'done' | 'blocked' | 'cancelled';
+export type VerificationType = 'agent' | 'human';
 
 // Backward compat: map old statuses to new
 function migrateTaskStatus(status: string): TaskStatus {
@@ -24,9 +25,11 @@ export type Task = {
   title: string;
   status: TaskStatus;
   taskType?: TaskType;
+  verificationType?: VerificationType;
   plan?: string;
   planDocPath?: string;
   result?: string;
+  handoffSummary?: string;
   reason?: string;
   sessionId?: string;
   sessionKey?: string;
@@ -302,6 +305,7 @@ export const tasksAddTool = tool(
     title: z.string(),
     goalId: z.string().optional(),
     status: z.enum(['draft', 'reviewed', 'approved', 'running', 'checking', 'done', 'blocked', 'cancelled']).optional(),
+    verificationType: z.enum(['agent', 'human']).optional().describe('Who has final sign-off after all agent checks pass. agent: pulse can close it automatically. human: requires human verification. Default: agent'),
     plan: z.string().optional(),
     reason: z.string().optional(),
   },
@@ -322,6 +326,7 @@ export const tasksAddTool = tool(
       goalId: args.goalId,
       title: args.title,
       status,
+      verificationType: args.verificationType || 'agent',
       plan: args.plan,
       planDocPath: getTaskPlanPath(id),
       reason: args.reason,
@@ -347,8 +352,10 @@ export const tasksUpdateTool = tool(
     title: z.string().optional(),
     goalId: z.string().nullable().optional(),
     status: z.enum(['draft', 'reviewed', 'approved', 'running', 'checking', 'done', 'blocked', 'cancelled']).optional(),
+    verificationType: z.enum(['agent', 'human']).optional(),
     plan: z.string().optional(),
     result: z.string().optional(),
+    handoffSummary: z.string().optional().describe('Agent A\'s handoff: what was done and where to verify it'),
     reason: z.string().optional(),
     sessionId: z.string().optional(),
     sessionKey: z.string().optional(),
@@ -366,6 +373,7 @@ export const tasksUpdateTool = tool(
     if (args.title !== undefined) task.title = args.title;
     if (args.goalId !== undefined) task.goalId = args.goalId || undefined;
     if (args.status !== undefined) task.status = normalizeStatusForApproval(task, args.status);
+    if (args.verificationType !== undefined) task.verificationType = args.verificationType;
     if (args.plan !== undefined) {
       writeTaskPlanDoc(task, args.plan);
     } else {
@@ -373,21 +381,10 @@ export const tasksUpdateTool = tool(
       task.plan = readTaskPlanDoc(task);
     }
     if (args.result !== undefined) task.result = args.result;
+    if (args.handoffSummary !== undefined) task.handoffSummary = args.handoffSummary;
     if (args.reason !== undefined) task.reason = args.reason;
     if (args.sessionId !== undefined) task.sessionId = args.sessionId;
     if (args.sessionKey !== undefined) task.sessionKey = args.sessionKey;
-
-    // Validate plan-vs-delivery and onwards momentum when transitioning to done
-    if (task.status === 'done' && task.approvedAt) {
-      const resultText = task.result || '';
-      const planText = readTaskPlanDoc(task) || task.plan || '';
-      const validation = validateTaskCompletion(task.title, planText, resultText, task.taskType);
-      if (!validation.canComplete) {
-        task.status = 'checking';
-        task.reason = validation.reason;
-        appendTaskLog(task.id, 'task_done_validation_failed', validation.reason || 'Validation failed');
-      }
-    }
 
     task.updatedAt = new Date().toISOString();
     if (task.status === 'done' && !task.completedAt) task.completedAt = task.updatedAt;
@@ -410,10 +407,11 @@ export const tasksUpdateTool = tool(
 
 export const tasksDoneTool = tool(
   'tasks_done',
-  'Mark task as done and optionally set result.',
+  'Hand off completed work for verification. Agent A writes what they did and where to verify it. Status moves to checking for Agent B and C to verify.',
   {
     id: z.string(),
-    result: z.string().optional(),
+    result: z.string().describe('What was accomplished, files changed, outcomes'),
+    handoffSummary: z.string().describe('Explicit handoff: "Here is what I did, here are the files changed, here is where to verify it"'),
   },
   async (args) => {
     const state = loadTasks();
@@ -423,7 +421,8 @@ export const tasksDoneTool = tool(
 
     if (!task.approvedAt) {
       task.status = 'reviewed';
-      if (args.result !== undefined) task.result = args.result;
+      task.result = args.result;
+      task.handoffSummary = args.handoffSummary;
       task.updatedAt = now;
       task.completedAt = undefined;
       ensureApprovalRequest(task);
@@ -432,29 +431,16 @@ export const tasksDoneTool = tool(
       return { content: [{ type: 'text', text: `Task #${task.id} moved to reviewed for human approval` }] };
     }
 
-    // Validate plan-vs-delivery and onwards momentum before allowing done
-    const resultText = args.result ?? task.result ?? '';
-    const planText = readTaskPlanDoc(task) || task.plan || '';
-    const validation = validateTaskCompletion(task.title, planText, resultText, task.taskType);
-
-    if (!validation.canComplete) {
-      task.status = 'checking';
-      if (args.result !== undefined) task.result = args.result;
-      task.reason = validation.reason;
-      task.updatedAt = now;
-      task.completedAt = undefined;
-      saveTasks(state);
-      appendTaskLog(task.id, 'task_done_validation_failed', validation.reason || 'Validation failed');
-      return { content: [{ type: 'text', text: `Task #${task.id} moved to checking: ${validation.reason}` }] };
-    }
-
-    task.status = 'done';
-    if (args.result !== undefined) task.result = args.result;
+    // Always hand off to checking for verification by Agent B and C
+    task.status = 'checking';
+    task.result = args.result;
+    task.handoffSummary = args.handoffSummary;
     task.updatedAt = now;
-    task.completedAt = now;
+    task.completedAt = undefined;
+    task.reason = undefined; // Clear any previous reason
     saveTasks(state);
-    appendTaskLog(task.id, 'task_done', 'Task marked done');
-    return { content: [{ type: 'text', text: `Task #${task.id} marked done` }] };
+    appendTaskLog(task.id, 'task_handoff', 'Task handed off for verification');
+    return { content: [{ type: 'text', text: `Task #${task.id} handed off for verification. Agent B and C will verify before final completion.` }] };
   },
 );
 

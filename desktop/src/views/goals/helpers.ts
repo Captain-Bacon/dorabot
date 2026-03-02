@@ -16,15 +16,19 @@ export type Goal = {
 
 export type TaskType = 'implementation' | 'audit' | 'research' | 'exploration' | 'design' | 'discovery';
 
+export type VerificationType = 'agent' | 'human';
+
 export type Task = {
   id: string;
   goalId?: string;
   title: string;
   status: TaskStatus;
   taskType?: TaskType;
+  verificationType?: VerificationType;
   plan?: string;
   planDocPath?: string;
   result?: string;
+  handoffSummary?: string;
   reason?: string;
   sessionId?: string;
   sessionKey?: string;
@@ -200,6 +204,15 @@ export function isValidationBlock(task: Task): boolean {
     || task.reason.includes('Completion blocked')
     || task.reason.includes('follow-up tasks')
   );
+}
+
+// Verification type badge
+export function getVerificationTypeBadge(type?: VerificationType): { bg: string; text: string; label: string } | null {
+  if (!type) return null;
+  switch (type) {
+    case 'agent': return { bg: 'bg-violet-500/15', text: 'text-violet-500', label: 'agent' };
+    case 'human': return { bg: 'bg-amber-500/15', text: 'text-amber-500', label: 'human' };
+  }
 }
 
 // stable goal colors — deterministic from id, won't shift when goals reorder
