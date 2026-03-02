@@ -612,6 +612,7 @@ export function Automations({ gateway }: AutomationsProps) {
 
 type PulseSlot = {
   mode: string;
+  interval: string;
   days: number[];
   start: number;
   end: number;
