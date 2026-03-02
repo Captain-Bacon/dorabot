@@ -14,10 +14,52 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
-import { Plus, X, Play, Pause, Trash2, ChevronDown, ChevronRight, Clock, Zap, Activity, Radio } from 'lucide-react';
+import { Plus, X, Play, Pause, Trash2, ChevronDown, ChevronRight, Clock, Zap, Activity, Radio, Timer } from 'lucide-react';
 
 const PULSE_SCHEDULE_ID = 'autonomy-pulse';
 const PULSE_INTERVALS = ['15m', '30m', '1h', '2h'];
+
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => {
+  const suffix = i >= 12 ? 'PM' : 'AM';
+  const display = i === 0 ? 12 : i > 12 ? i - 12 : i;
+  return { value: String(i), label: `${display}:00 ${suffix}` };
+});
+
+const TIMEZONES = [
+  'Europe/London',
+  'Europe/Paris',
+  'Europe/Berlin',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'Asia/Tokyo',
+  'Asia/Shanghai',
+  'Australia/Sydney',
+  'Pacific/Auckland',
+];
+
+function detectCurrentMode(schedule: { timezone?: string; workingHours?: { start: number; end: number }; offPeakHours?: { start: number; end: number } } | undefined): 'working' | 'offpeak' | 'overnight' {
+  const tz = schedule?.timezone || 'UTC';
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: tz });
+  const hour = parseInt(formatter.format(now), 10);
+
+  const workingStart = schedule?.workingHours?.start ?? 9;
+  const workingEnd = schedule?.workingHours?.end ?? 18;
+  const offPeakStart = schedule?.offPeakHours?.start ?? 18;
+  const offPeakEnd = schedule?.offPeakHours?.end ?? 23;
+
+  if (hour >= workingStart && hour < workingEnd) return 'working';
+  if (hour >= offPeakStart && hour < offPeakEnd) return 'offpeak';
+  return 'overnight';
+}
+
+const MODE_LABELS: Record<string, { label: string; color: string; description: string }> = {
+  working: { label: 'Working', color: 'bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30', description: 'Full engagement: all priorities, proactive proposals' },
+  offpeak: { label: 'Off-peak', color: 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/30', description: 'Reduced: core priorities only, fewer proposals' },
+  overnight: { label: 'Overnight', color: 'bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30', description: 'Minimal: critical items only' },
+};
 
 type PulseStatus = {
   enabled: boolean;
@@ -39,6 +81,8 @@ export function Automations({ gateway }: AutomationsProps) {
   const [pulseLoading, setPulseLoading] = useState(false);
   const [pulseRunning, setPulseRunning] = useState(false);
   const [pulseRunStartedAt, setPulseRunStartedAt] = useState<number | null>(null);
+  const [showPulseSchedule, setShowPulseSchedule] = useState(false);
+  const [currentMode, setCurrentMode] = useState<'working' | 'offpeak' | 'overnight'>('working');
   const [newItem, setNewItem] = useState({
     summary: '',
     message: '',
@@ -76,6 +120,15 @@ export function Automations({ gateway }: AutomationsProps) {
     loadItems();
     loadPulseStatus();
   }, [loadItems, loadPulseStatus]);
+
+  // detect current pulse mode
+  useEffect(() => {
+    const cfg = gateway.configData as Record<string, any> | null;
+    const schedule = cfg?.pulseSchedule;
+    setCurrentMode(detectCurrentMode(schedule));
+    const interval = setInterval(() => setCurrentMode(detectCurrentMode(schedule)), 60000);
+    return () => clearInterval(interval);
+  }, [gateway.configData]);
 
   // refresh pulse status when calendar runs happen
   useEffect(() => {
@@ -306,10 +359,26 @@ export function Automations({ gateway }: AutomationsProps) {
                     </Button>
                   </div>
 
-                  <div className="flex gap-x-4 text-[10px] text-muted-foreground">
-                    {pulse.lastRunAt && <span>last: {formatRelativeTime(pulse.lastRunAt)}</span>}
-                    {pulse.nextRunAt && <span>next: {formatTime(pulse.nextRunAt)}</span>}
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-x-4 text-[10px] text-muted-foreground">
+                      {pulse.lastRunAt && <span>last: {formatRelativeTime(pulse.lastRunAt)}</span>}
+                      {pulse.nextRunAt && <span>next: {formatTime(pulse.nextRunAt)}</span>}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-[10px] px-2 gap-1"
+                      onClick={() => setShowPulseSchedule(!showPulseSchedule)}
+                    >
+                      <Timer className="w-3 h-3" />
+                      {showPulseSchedule ? 'hide' : 'schedule'}
+                      <Badge className={`text-[8px] h-3.5 px-1 border-0 ${MODE_LABELS[currentMode].color}`}>
+                        {MODE_LABELS[currentMode].label}
+                      </Badge>
+                    </Button>
                   </div>
+
+                  {showPulseSchedule && <PulseScheduleSettings gateway={gateway} currentMode={currentMode} />}
 
                   {!hasConnectedChannel && (
                     <div className="flex items-center gap-2 p-2 rounded bg-warning/10 border border-warning/20">
@@ -471,6 +540,124 @@ export function Automations({ gateway }: AutomationsProps) {
           )}
         </div>
       </ScrollArea>
+    </div>
+  );
+}
+
+function PulseScheduleSettings({ gateway, currentMode }: { gateway: ReturnType<typeof useGateway>; currentMode: 'working' | 'offpeak' | 'overnight' }) {
+  const cfg = gateway.configData as Record<string, any> | null;
+  const schedule = cfg?.pulseSchedule as { timezone?: string; workingHours?: { start: number; end: number }; offPeakHours?: { start: number; end: number } } | undefined;
+  const timezone = schedule?.timezone || 'Europe/London';
+  const workingStart = schedule?.workingHours?.start ?? 9;
+  const workingEnd = schedule?.workingHours?.end ?? 18;
+  const offPeakStart = schedule?.offPeakHours?.start ?? 18;
+  const offPeakEnd = schedule?.offPeakHours?.end ?? 23;
+
+  const mode = MODE_LABELS[currentMode];
+
+  const set = useCallback(async (key: string, value: unknown) => {
+    try {
+      await gateway.rpc('config.set', { key, value });
+    } catch (err) {
+      console.error(`failed to set ${key}:`, err);
+    }
+  }, [gateway]);
+
+  const fmtHour = (h: number) => {
+    const suffix = h >= 12 ? 'PM' : 'AM';
+    const display = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    return `${display}:00 ${suffix}`;
+  };
+
+  return (
+    <div className="space-y-3 pt-2 border-t border-border">
+      <div className="text-[10px] text-muted-foreground bg-muted/30 rounded px-2 py-1.5">
+        {mode.description}
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-[10px] text-muted-foreground">timezone</Label>
+        <Select value={timezone} onValueChange={v => set('pulseSchedule.timezone', v)}>
+          <SelectTrigger className="h-7 text-[11px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {TIMEZONES.map(tz => (
+              <SelectItem key={tz} value={tz} className="text-[11px]">{tz}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center gap-1.5">
+          <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
+          <Label className="text-[10px] font-medium">working hours</Label>
+        </div>
+        <div className="flex items-center gap-2">
+          <Select value={String(workingStart)} onValueChange={v => set('pulseSchedule.workingHours', { start: parseInt(v), end: workingEnd })}>
+            <SelectTrigger className="h-7 text-[11px] flex-1">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {HOUR_OPTIONS.map(h => (
+                <SelectItem key={h.value} value={h.value} className="text-[11px]">{h.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span className="text-[10px] text-muted-foreground">to</span>
+          <Select value={String(workingEnd)} onValueChange={v => set('pulseSchedule.workingHours', { start: workingStart, end: parseInt(v) })}>
+            <SelectTrigger className="h-7 text-[11px] flex-1">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {HOUR_OPTIONS.map(h => (
+                <SelectItem key={h.value} value={h.value} className="text-[11px]">{h.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center gap-1.5">
+          <span className="inline-block w-2 h-2 rounded-full bg-yellow-500" />
+          <Label className="text-[10px] font-medium">off-peak hours</Label>
+        </div>
+        <div className="flex items-center gap-2">
+          <Select value={String(offPeakStart)} onValueChange={v => set('pulseSchedule.offPeakHours', { start: parseInt(v), end: offPeakEnd })}>
+            <SelectTrigger className="h-7 text-[11px] flex-1">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {HOUR_OPTIONS.map(h => (
+                <SelectItem key={h.value} value={h.value} className="text-[11px]">{h.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span className="text-[10px] text-muted-foreground">to</span>
+          <Select value={String(offPeakEnd)} onValueChange={v => set('pulseSchedule.offPeakHours', { start: offPeakStart, end: parseInt(v) })}>
+            <SelectTrigger className="h-7 text-[11px] flex-1">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {HOUR_OPTIONS.map(h => (
+                <SelectItem key={h.value} value={h.value} className="text-[11px]">{h.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <div className="flex items-center gap-1.5">
+          <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
+          <Label className="text-[10px] font-medium">overnight</Label>
+        </div>
+        <div className="text-[11px] text-muted-foreground pl-3.5">
+          {fmtHour(offPeakEnd)} to {fmtHour(workingStart)} (calculated)
+        </div>
+      </div>
     </div>
   );
 }
