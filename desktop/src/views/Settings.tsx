@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Shield, Brain, Globe, Settings2, Box, Lock, FolderLock, X, Plus, Wrench, Activity, Sun, Check } from 'lucide-react';
+import { Shield, Brain, Globe, Settings2, Box, Lock, FolderLock, X, Plus, Wrench, Activity, Sun, Check, Timer } from 'lucide-react';
 
 type Props = {
   gateway: ReturnType<typeof useGateway>;
@@ -202,6 +202,9 @@ export function SettingsView({ gateway }: Props) {
               </div>
             </CardContent>
           </Card>
+
+          {/* pulse schedule */}
+          <PulseScheduleCard cfg={cfg} set={set} disabled={disabled} />
 
           {/* browser */}
           <Card>
@@ -602,6 +605,189 @@ function SettingRow({ label, description, children }: { label: string; descripti
       </div>
       <div className="shrink-0">{children}</div>
     </div>
+  );
+}
+
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => {
+  const suffix = i >= 12 ? 'PM' : 'AM';
+  const display = i === 0 ? 12 : i > 12 ? i - 12 : i;
+  return { value: String(i), label: `${display}:00 ${suffix}` };
+});
+
+const TIMEZONES = [
+  'Europe/London',
+  'Europe/Paris',
+  'Europe/Berlin',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'Asia/Tokyo',
+  'Asia/Shanghai',
+  'Australia/Sydney',
+  'Pacific/Auckland',
+];
+
+function detectCurrentMode(schedule: { timezone?: string; workingHours?: { start: number; end: number }; offPeakHours?: { start: number; end: number } } | undefined): 'working' | 'offpeak' | 'overnight' {
+  const tz = schedule?.timezone || 'UTC';
+  // Get current hour in user's timezone
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: tz });
+  const hour = parseInt(formatter.format(now), 10);
+
+  const workingStart = schedule?.workingHours?.start ?? 9;
+  const workingEnd = schedule?.workingHours?.end ?? 18;
+  const offPeakStart = schedule?.offPeakHours?.start ?? 18;
+  const offPeakEnd = schedule?.offPeakHours?.end ?? 23;
+
+  if (hour >= workingStart && hour < workingEnd) return 'working';
+  if (hour >= offPeakStart && hour < offPeakEnd) return 'offpeak';
+  return 'overnight';
+}
+
+const MODE_LABELS: Record<string, { label: string; color: string; description: string }> = {
+  working: { label: 'Working', color: 'bg-green-500/15 text-green-700 dark:text-green-400', description: 'Full engagement: all priorities, proactive proposals' },
+  offpeak: { label: 'Off-peak', color: 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-400', description: 'Reduced: core priorities only, fewer proposals' },
+  overnight: { label: 'Overnight', color: 'bg-blue-500/15 text-blue-700 dark:text-blue-400', description: 'Minimal: critical items only' },
+};
+
+function PulseScheduleCard({ cfg, set, disabled }: { cfg: Record<string, any> | null; set: (key: string, value: unknown) => Promise<void>; disabled: boolean }) {
+  const schedule = cfg?.pulseSchedule as { timezone?: string; workingHours?: { start: number; end: number }; offPeakHours?: { start: number; end: number } } | undefined;
+  const timezone = schedule?.timezone || 'Europe/London';
+  const workingStart = schedule?.workingHours?.start ?? 9;
+  const workingEnd = schedule?.workingHours?.end ?? 18;
+  const offPeakStart = schedule?.offPeakHours?.start ?? 18;
+  const offPeakEnd = schedule?.offPeakHours?.end ?? 23;
+
+  const [currentMode, setCurrentMode] = useState<'working' | 'offpeak' | 'overnight'>('working');
+
+  useEffect(() => {
+    setCurrentMode(detectCurrentMode(schedule));
+    const interval = setInterval(() => setCurrentMode(detectCurrentMode(schedule)), 60000);
+    return () => clearInterval(interval);
+  }, [schedule?.timezone, schedule?.workingHours?.start, schedule?.workingHours?.end, schedule?.offPeakHours?.start, schedule?.offPeakHours?.end]);
+
+  const mode = MODE_LABELS[currentMode];
+
+  const fmtHour = (h: number) => {
+    const suffix = h >= 12 ? 'PM' : 'AM';
+    const display = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    return `${display}:00 ${suffix}`;
+  };
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center gap-2 mb-4">
+          <Timer className="w-4 h-4 text-primary" />
+          <span className="text-xs font-semibold">Pulse Schedule</span>
+          <Badge className={`text-[9px] h-4 ml-auto border-0 ${mode.color}`}>{mode.label}</Badge>
+        </div>
+
+        <div className="space-y-4">
+          {/* current mode description */}
+          <div className="text-[10px] text-muted-foreground bg-muted/50 rounded px-2 py-1.5">
+            {mode.description}
+          </div>
+
+          {/* timezone */}
+          <SettingRow label="timezone" description="times are evaluated in this timezone">
+            <Select value={timezone} onValueChange={v => set('pulseSchedule.timezone', v)} disabled={disabled}>
+              <SelectTrigger className="h-7 w-44 text-[11px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TIMEZONES.map(tz => (
+                  <SelectItem key={tz} value={tz} className="text-[11px]">{tz}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </SettingRow>
+
+          {/* working hours */}
+          <div className="space-y-2">
+            <div className="flex-1 min-w-0">
+              <div className="text-[11px] font-medium text-foreground flex items-center gap-1.5">
+                <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
+                working hours
+              </div>
+              <div className="text-[10px] text-muted-foreground">full engagement: all priorities, proactive proposals</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Select value={String(workingStart)} onValueChange={v => set('pulseSchedule.workingHours', { start: parseInt(v), end: workingEnd })} disabled={disabled}>
+                <SelectTrigger className="h-7 w-28 text-[11px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {HOUR_OPTIONS.map(h => (
+                    <SelectItem key={h.value} value={h.value} className="text-[11px]">{h.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="text-[10px] text-muted-foreground">to</span>
+              <Select value={String(workingEnd)} onValueChange={v => set('pulseSchedule.workingHours', { start: workingStart, end: parseInt(v) })} disabled={disabled}>
+                <SelectTrigger className="h-7 w-28 text-[11px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {HOUR_OPTIONS.map(h => (
+                    <SelectItem key={h.value} value={h.value} className="text-[11px]">{h.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* off-peak hours */}
+          <div className="space-y-2">
+            <div className="flex-1 min-w-0">
+              <div className="text-[11px] font-medium text-foreground flex items-center gap-1.5">
+                <span className="inline-block w-2 h-2 rounded-full bg-yellow-500" />
+                off-peak hours
+              </div>
+              <div className="text-[10px] text-muted-foreground">reduced: core priorities only, fewer proposals</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Select value={String(offPeakStart)} onValueChange={v => set('pulseSchedule.offPeakHours', { start: parseInt(v), end: offPeakEnd })} disabled={disabled}>
+                <SelectTrigger className="h-7 w-28 text-[11px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {HOUR_OPTIONS.map(h => (
+                    <SelectItem key={h.value} value={h.value} className="text-[11px]">{h.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="text-[10px] text-muted-foreground">to</span>
+              <Select value={String(offPeakEnd)} onValueChange={v => set('pulseSchedule.offPeakHours', { start: offPeakStart, end: parseInt(v) })} disabled={disabled}>
+                <SelectTrigger className="h-7 w-28 text-[11px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {HOUR_OPTIONS.map(h => (
+                    <SelectItem key={h.value} value={h.value} className="text-[11px]">{h.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* overnight (calculated, not editable) */}
+          <div className="space-y-1">
+            <div className="flex-1 min-w-0">
+              <div className="text-[11px] font-medium text-foreground flex items-center gap-1.5">
+                <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
+                overnight
+              </div>
+              <div className="text-[10px] text-muted-foreground">minimal: critical items only</div>
+            </div>
+            <div className="text-[11px] text-muted-foreground pl-3.5">
+              {fmtHour(offPeakEnd)} to {fmtHour(workingStart)} (calculated)
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

@@ -5305,6 +5305,52 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
             return { id, result: { key, value } };
           }
 
+          // pulse schedule config
+          if (key === 'pulseSchedule.timezone' && typeof value === 'string') {
+            if (!config.pulseSchedule) config.pulseSchedule = {};
+            config.pulseSchedule.timezone = value;
+            saveConfig(config);
+            // refresh autonomous schedule with new config
+            if (scheduler && config.autonomy === 'autonomous') {
+              const item = buildAutonomousCalendarItem(value, undefined, config.pulseSchedule);
+              scheduler.updateItem(AUTONOMOUS_SCHEDULE_ID, { message: item.message, timezone: value });
+            }
+            broadcast({ event: 'config.update', data: { key, value } });
+            return { id, result: { key, value } };
+          }
+
+          if (key === 'pulseSchedule.workingHours' && typeof value === 'object' && value !== null) {
+            const v = value as { start?: number; end?: number };
+            if (typeof v.start !== 'number' || typeof v.end !== 'number') return { id, error: 'workingHours requires start and end (0-23)' };
+            if (v.start < 0 || v.start > 23 || v.end < 0 || v.end > 23) return { id, error: 'hours must be 0-23' };
+            if (!config.pulseSchedule) config.pulseSchedule = {};
+            config.pulseSchedule.workingHours = { start: v.start, end: v.end };
+            saveConfig(config);
+            if (scheduler && config.autonomy === 'autonomous') {
+              const tz = config.pulseSchedule.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+              const item = buildAutonomousCalendarItem(tz, undefined, config.pulseSchedule);
+              scheduler.updateItem(AUTONOMOUS_SCHEDULE_ID, { message: item.message });
+            }
+            broadcast({ event: 'config.update', data: { key, value } });
+            return { id, result: { key, value } };
+          }
+
+          if (key === 'pulseSchedule.offPeakHours' && typeof value === 'object' && value !== null) {
+            const v = value as { start?: number; end?: number };
+            if (typeof v.start !== 'number' || typeof v.end !== 'number') return { id, error: 'offPeakHours requires start and end (0-23)' };
+            if (v.start < 0 || v.start > 23 || v.end < 0 || v.end > 23) return { id, error: 'hours must be 0-23' };
+            if (!config.pulseSchedule) config.pulseSchedule = {};
+            config.pulseSchedule.offPeakHours = { start: v.start, end: v.end };
+            saveConfig(config);
+            if (scheduler && config.autonomy === 'autonomous') {
+              const tz = config.pulseSchedule.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+              const item = buildAutonomousCalendarItem(tz, undefined, config.pulseSchedule);
+              scheduler.updateItem(AUTONOMOUS_SCHEDULE_ID, { message: item.message });
+            }
+            broadcast({ event: 'config.update', data: { key, value } });
+            return { id, result: { key, value } };
+          }
+
           return { id, error: `unsupported config key: ${key}` };
         }
 
