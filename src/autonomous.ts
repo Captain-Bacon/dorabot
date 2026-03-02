@@ -43,13 +43,18 @@ export function detectCurrentPulseMode(scheduleConfig?: PulseScheduleConfig, tim
   // If slots are defined, use slot-based detection
   if (scheduleConfig?.slots && scheduleConfig.slots.length > 0) {
     for (const slot of scheduleConfig.slots) {
-      if (slot.days.includes(day) && hour >= slot.start && hour < slot.end) {
+      if (!slot.days.includes(day)) continue;
+      // Handle wrap-around (e.g., start=23, end=7 means 23:00-07:00)
+      const inRange = slot.start <= slot.end
+        ? (hour >= slot.start && hour < slot.end)
+        : (hour >= slot.start || hour < slot.end);
+      if (inRange) {
         const modeConfig = scheduleConfig.modes?.[slot.mode];
         if (modeConfig) {
           return {
             mode: slot.mode,
             config: {
-              interval: slot.interval || '30m',  // interval comes from slot, not mode
+              interval: slot.interval || modeConfig.interval || '30m',
               priorityLevel: modeConfig.priorityLevel || 'full',
               description: modeConfig.description,
               customPrompt: modeConfig.customPrompt,

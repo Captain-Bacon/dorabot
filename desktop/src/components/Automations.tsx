@@ -54,9 +54,12 @@ function detectCurrentMode(schedule: { timezone?: string; modes?: Record<string,
   // If slots are defined, use slot-based detection
   if (schedule?.slots && schedule.slots.length > 0) {
     for (const slot of schedule.slots) {
-      if (slot.days.includes(day) && hour >= slot.start && hour < slot.end) {
-        return slot.mode;
-      }
+      if (!slot.days.includes(day)) continue;
+      // Handle wrap-around (e.g., start=23, end=7 means 23:00-07:00)
+      const inRange = slot.start <= slot.end
+        ? (hour >= slot.start && hour < slot.end)
+        : (hour >= slot.start || hour < slot.end);
+      if (inRange) return slot.mode;
     }
   }
 
