@@ -5583,6 +5583,11 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           return { id, result: { deleted: name } };
         }
 
+        case 'pulseSchedule.templates.get': {
+          const { getBuiltInTemplates } = await import('../autonomous.js');
+          return { id, result: getBuiltInTemplates() };
+        }
+
         case 'pulseSchedule.slots.list': {
           return { id, result: config.pulseSchedule?.slots || [] };
         }

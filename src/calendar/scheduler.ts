@@ -3,6 +3,7 @@ const { RRule } = rrule;
 import { DateTime } from 'luxon';
 import type { Config } from '../config.js';
 import { runAgent } from '../agent.js';
+import { AUTONOMOUS_SCHEDULE_ID, detectCurrentPulseMode, buildAutonomousCalendarItem } from '../autonomous.js';
 export function parseDurationMs(duration: string): number | null {
   const match = duration.match(/^(\d+)(ms|s|m|h|d)?$/i);
   if (!match) return null;
@@ -558,7 +559,7 @@ export function startScheduler(opts: {
 
     // Check for mode transitions every hour
     if (config.autonomy === 'autonomous' && config.pulseSchedule && now - lastModeCheckTime >= 3600000) {
-      const { AUTONOMOUS_SCHEDULE_ID, detectCurrentPulseMode, buildAutonomousCalendarItem } = require('../autonomous.js');
+      // AUTONOMOUS_SCHEDULE_ID, detectCurrentPulseMode, buildAutonomousCalendarItem imported at top level
       const { mode } = detectCurrentPulseMode(config.pulseSchedule, config.pulseSchedule?.timezone);
 
       if (lastDetectedMode && lastDetectedMode !== mode) {

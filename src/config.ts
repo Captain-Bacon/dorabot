@@ -62,6 +62,7 @@ export type PulseModeConfig = {
   interval?: string;  // e.g. '30m', '2h', '6h'
   priorityLevel?: 'full' | 'reduced' | 'minimal';  // behavior priority level
   description?: string;  // optional description (max 100 chars)
+  customPrompt?: string;  // custom priority template (overrides priorityLevel template)
 };
 
 export type PulseSlot = {

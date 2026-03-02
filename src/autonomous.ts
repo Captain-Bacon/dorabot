@@ -34,7 +34,7 @@ export function detectPulseMode(scheduleConfig?: PulseScheduleConfig, timezone?:
   return mode as PulseMode;
 }
 
-export function detectCurrentPulseMode(scheduleConfig?: PulseScheduleConfig, timezone?: string): { mode: string; config: { interval: string; priorityLevel: string; description?: string } } {
+export function detectCurrentPulseMode(scheduleConfig?: PulseScheduleConfig, timezone?: string): { mode: string; config: { interval: string; priorityLevel: string; description?: string; customPrompt?: string } } {
   const tz = timezone || scheduleConfig?.timezone || 'UTC';
   const now = DateTime.now().setZone(tz);
   const hour = now.hour;
@@ -52,6 +52,7 @@ export function detectCurrentPulseMode(scheduleConfig?: PulseScheduleConfig, tim
               interval: modeConfig.interval || '30m',
               priorityLevel: modeConfig.priorityLevel || 'full',
               description: modeConfig.description,
+              customPrompt: modeConfig.customPrompt,
             },
           };
         }
@@ -85,6 +86,7 @@ export function detectCurrentPulseMode(scheduleConfig?: PulseScheduleConfig, tim
       interval: modeConfig?.interval || defaultIntervals[modeName as keyof typeof defaultIntervals] || '30m',
       priorityLevel: modeConfig?.priorityLevel || defaultPriorities[modeName as keyof typeof defaultPriorities] || 'full',
       description: modeConfig?.description,
+      customPrompt: modeConfig?.customPrompt,
     },
   };
 }
@@ -147,6 +149,14 @@ const PRIORITY_TEMPLATE_MINIMAL = `## Priority (strict order)
 
 Overnight mode: minimal activity. Most work waits for working hours. No engagement, no proposals, no new goals.`;
 
+export function getBuiltInTemplates() {
+  return {
+    full: PRIORITY_TEMPLATE_FULL,
+    reduced: PRIORITY_TEMPLATE_REDUCED,
+    minimal: PRIORITY_TEMPLATE_MINIMAL,
+  };
+}
+
 export function buildAutonomousPrompt(timezone?: string, scheduleConfig?: PulseScheduleConfig): string {
   const todayDir = getTodayMemoryDir(timezone);
   const { mode, config: modeConfig } = detectCurrentPulseMode(scheduleConfig, timezone);
@@ -161,18 +171,23 @@ export function buildAutonomousPrompt(timezone?: string, scheduleConfig?: PulseS
 
   let priorities: string;
 
-  switch (modeConfig.priorityLevel) {
-    case 'full':
-      priorities = PRIORITY_TEMPLATE_FULL;
-      break;
-    case 'reduced':
-      priorities = PRIORITY_TEMPLATE_REDUCED;
-      break;
-    case 'minimal':
-      priorities = PRIORITY_TEMPLATE_MINIMAL;
-      break;
-    default:
-      priorities = PRIORITY_TEMPLATE_FULL;
+  // Use custom prompt if available, otherwise use template based on priorityLevel
+  if (modeConfig.customPrompt) {
+    priorities = modeConfig.customPrompt;
+  } else {
+    switch (modeConfig.priorityLevel) {
+      case 'full':
+        priorities = PRIORITY_TEMPLATE_FULL;
+        break;
+      case 'reduced':
+        priorities = PRIORITY_TEMPLATE_REDUCED;
+        break;
+      case 'minimal':
+        priorities = PRIORITY_TEMPLATE_MINIMAL;
+        break;
+      default:
+        priorities = PRIORITY_TEMPLATE_FULL;
+    }
   }
 
   const afterActing = `

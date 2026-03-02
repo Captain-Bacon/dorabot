@@ -831,10 +831,12 @@ function PulseScheduleSettings({ gateway, currentMode }: { gateway: ReturnType<t
 }
 
 function PulseModeSettings({ gateway }: { gateway: ReturnType<typeof useGateway> }) {
-  const [modes, setModes] = useState<Record<string, { interval?: string; priorityLevel?: string; description?: string; hours?: { start: number; end: number } }>>({});
+  const [modes, setModes] = useState<Record<string, { interval?: string; priorityLevel?: string; description?: string; hours?: { start: number; end: number }; customPrompt?: string }>>({});
   const [editingMode, setEditingMode] = useState<string | null>(null);
   const [creatingMode, setCreatingMode] = useState(false);
-  const [formData, setFormData] = useState({ name: '', interval: '30m', priorityLevel: 'full', description: '' });
+  const [editingPrompt, setEditingPrompt] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<Record<string, string>>({});
+  const [formData, setFormData] = useState({ name: '', interval: '30m', priorityLevel: 'full', description: '', customPrompt: '' });
 
   const loadModes = useCallback(async () => {
     if (gateway.connectionState !== 'connected') return;
@@ -846,14 +848,26 @@ function PulseModeSettings({ gateway }: { gateway: ReturnType<typeof useGateway>
     }
   }, [gateway.connectionState, gateway.rpc]);
 
+  const loadTemplates = useCallback(async () => {
+    if (gateway.connectionState !== 'connected') return;
+    try {
+      const result = await gateway.rpc('pulseSchedule.templates.get') as Record<string, string>;
+      setTemplates(result);
+    } catch (err) {
+      console.error('failed to load templates:', err);
+    }
+  }, [gateway.connectionState, gateway.rpc]);
+
   useEffect(() => {
     loadModes();
-  }, [loadModes]);
+    loadTemplates();
+  }, [loadModes, loadTemplates]);
 
   const resetForm = () => {
-    setFormData({ name: '', interval: '30m', priorityLevel: 'full', description: '' });
+    setFormData({ name: '', interval: '30m', priorityLevel: 'full', description: '', customPrompt: '' });
     setEditingMode(null);
     setCreatingMode(false);
+    setEditingPrompt(null);
   };
 
   const createMode = async () => {
@@ -893,15 +907,34 @@ function PulseModeSettings({ gateway }: { gateway: ReturnType<typeof useGateway>
       interval: mode.interval || '30m',
       priorityLevel: mode.priorityLevel || 'full',
       description: mode.description || '',
+      customPrompt: mode.customPrompt || '',
     });
     setEditingMode(name);
     setCreatingMode(false);
   };
 
   const startCreate = () => {
-    setFormData({ name: '', interval: '30m', priorityLevel: 'full', description: '' });
+    setFormData({ name: '', interval: '30m', priorityLevel: 'full', description: '', customPrompt: '' });
     setCreatingMode(true);
     setEditingMode(null);
+  };
+
+  const startEditPrompt = (modeName: string) => {
+    const mode = modes[modeName];
+    setFormData({
+      name: modeName,
+      interval: mode.interval || '30m',
+      priorityLevel: mode.priorityLevel || 'full',
+      description: mode.description || '',
+      customPrompt: mode.customPrompt || '',
+    });
+    setEditingPrompt(modeName);
+  };
+
+  const loadTemplate = (level: string) => {
+    if (templates[level]) {
+      setFormData({ ...formData, customPrompt: templates[level] });
+    }
   };
 
   const getModeIcon = (priorityLevel: string) => {
@@ -1002,35 +1035,126 @@ function PulseModeSettings({ gateway }: { gateway: ReturnType<typeof useGateway>
         </Card>
       )}
 
-      <div className="space-y-1.5">
-        {Object.entries(modes).map(([name, mode]) => (
-          <div key={name} className="flex items-center gap-2 p-2 rounded border border-border bg-card hover:border-primary/30 transition-colors">
-            <span className="text-sm">{getModeIcon(mode.priorityLevel || 'full')}</span>
-            <div className="flex-1 min-w-0">
-              <div className="text-[11px] font-semibold truncate">{name}</div>
-              <div className="text-[10px] text-muted-foreground">
-                {mode.interval} • {mode.priorityLevel || 'full'}{mode.description ? ` • ${mode.description}` : ''}
+      {editingPrompt && (
+        <Card className="border-primary/50">
+          <CardContent className="p-3 space-y-2">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-semibold">Edit prompt: {editingPrompt}</span>
+              <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={resetForm}>
+                <X className="w-3 h-3" />
+              </Button>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-[10px]">load built-in template (optional)</Label>
+              <div className="flex gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 text-[10px] px-2 flex-1"
+                  onClick={() => loadTemplate('full')}
+                >
+                  🟢 full
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 text-[10px] px-2 flex-1"
+                  onClick={() => loadTemplate('reduced')}
+                >
+                  🟡 reduced
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 text-[10px] px-2 flex-1"
+                  onClick={() => loadTemplate('minimal')}
+                >
+                  🔵 minimal
+                </Button>
               </div>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 text-[10px] px-2"
-              onClick={() => startEdit(name)}
-            >
-              edit
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 text-[10px] px-2 text-destructive hover:text-destructive"
-              onClick={() => deleteMode(name)}
-            >
-              delete
-            </Button>
-          </div>
-        ))}
-      </div>
+
+            <div className="space-y-1">
+              <Label className="text-[10px]">custom priority template</Label>
+              <Textarea
+                value={formData.customPrompt}
+                onChange={e => setFormData({ ...formData, customPrompt: e.target.value })}
+                placeholder="Leave empty to use built-in template based on priority level"
+                rows={12}
+                className="text-xs font-mono"
+              />
+              <span className="text-[9px] text-muted-foreground">
+                Custom prompt overrides the priority level template. Clear to use built-in.
+              </span>
+            </div>
+
+            <div className="flex gap-1.5 pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-6 text-[11px] px-2 flex-1"
+                onClick={resetForm}
+              >
+                cancel
+              </Button>
+              <Button
+                size="sm"
+                className="h-6 text-[11px] px-2 flex-1"
+                onClick={() => {
+                  updateMode(editingPrompt);
+                  setEditingPrompt(null);
+                }}
+              >
+                save
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {!editingPrompt && (
+        <div className="space-y-1.5">
+          {Object.entries(modes).map(([name, mode]) => (
+            <div key={name} className="flex items-center gap-2 p-2 rounded border border-border bg-card hover:border-primary/30 transition-colors">
+              <span className="text-sm">{getModeIcon(mode.priorityLevel || 'full')}</span>
+              <div className="flex-1 min-w-0">
+                <div className="text-[11px] font-semibold truncate">
+                  {name}
+                  {mode.customPrompt && <Badge variant="outline" className="text-[8px] h-3 px-1 ml-1.5">custom</Badge>}
+                </div>
+                <div className="text-[10px] text-muted-foreground">
+                  {mode.interval} • {mode.priorityLevel || 'full'}{mode.description ? ` • ${mode.description}` : ''}
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 text-[10px] px-2"
+                onClick={() => startEditPrompt(name)}
+              >
+                prompt
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 text-[10px] px-2"
+                onClick={() => startEdit(name)}
+              >
+                edit
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 text-[10px] px-2 text-destructive hover:text-destructive"
+                onClick={() => deleteMode(name)}
+              >
+                delete
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {!creatingMode && !editingMode && (
         <Button

@@ -148,6 +148,7 @@ export type RpcMethod =
   | 'pulseSchedule.modes.add'
   | 'pulseSchedule.modes.update'
   | 'pulseSchedule.modes.delete'
+  | 'pulseSchedule.templates.get'
   | 'pulseSchedule.slots.list'
   | 'pulseSchedule.slots.add'
   | 'pulseSchedule.slots.update'
