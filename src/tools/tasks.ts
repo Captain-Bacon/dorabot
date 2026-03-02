@@ -5,6 +5,7 @@ import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { getDb } from '../db.js';
 import { PLANS_DIR } from '../workspace.js';
+import { type TaskType, inferTaskType, validateTaskCompletion } from './task-validation.js';
 
 export type TaskStatus = 'draft' | 'reviewed' | 'approved' | 'running' | 'checking' | 'done' | 'blocked' | 'cancelled';
 
@@ -22,6 +23,7 @@ export type Task = {
   goalId?: string;
   title: string;
   status: TaskStatus;
+  taskType?: TaskType;
   plan?: string;
   planDocPath?: string;
   result?: string;
@@ -374,6 +376,19 @@ export const tasksUpdateTool = tool(
     if (args.reason !== undefined) task.reason = args.reason;
     if (args.sessionId !== undefined) task.sessionId = args.sessionId;
     if (args.sessionKey !== undefined) task.sessionKey = args.sessionKey;
+
+    // Validate plan-vs-delivery and onwards momentum when transitioning to done
+    if (task.status === 'done' && task.approvedAt) {
+      const resultText = task.result || '';
+      const planText = readTaskPlanDoc(task) || task.plan || '';
+      const validation = validateTaskCompletion(task.title, planText, resultText, task.taskType);
+      if (!validation.canComplete) {
+        task.status = 'checking';
+        task.reason = validation.reason;
+        appendTaskLog(task.id, 'task_done_validation_failed', validation.reason || 'Validation failed');
+      }
+    }
+
     task.updatedAt = new Date().toISOString();
     if (task.status === 'done' && !task.completedAt) task.completedAt = task.updatedAt;
     if (task.status !== 'done') task.completedAt = undefined;
@@ -415,6 +430,22 @@ export const tasksDoneTool = tool(
       saveTasks(state);
       appendTaskLog(task.id, 'task_done_blocked', 'Task attempted done before approval, moved to reviewed');
       return { content: [{ type: 'text', text: `Task #${task.id} moved to reviewed for human approval` }] };
+    }
+
+    // Validate plan-vs-delivery and onwards momentum before allowing done
+    const resultText = args.result ?? task.result ?? '';
+    const planText = readTaskPlanDoc(task) || task.plan || '';
+    const validation = validateTaskCompletion(task.title, planText, resultText, task.taskType);
+
+    if (!validation.canComplete) {
+      task.status = 'checking';
+      if (args.result !== undefined) task.result = args.result;
+      task.reason = validation.reason;
+      task.updatedAt = now;
+      task.completedAt = undefined;
+      saveTasks(state);
+      appendTaskLog(task.id, 'task_done_validation_failed', validation.reason || 'Validation failed');
+      return { content: [{ type: 'text', text: `Task #${task.id} moved to checking: ${validation.reason}` }] };
     }
 
     task.status = 'done';

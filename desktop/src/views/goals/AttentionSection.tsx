@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { ShieldCheck, Play, RotateCcw, CircleSlash, AlertTriangle, X, FileText, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, Play, RotateCcw, CircleSlash, AlertTriangle, X, FileText, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import type { Task, Goal } from './helpers';
+import { isValidationBlock } from './helpers';
 import type { TaskRun } from '../../hooks/useGateway';
 
 type Props = {
@@ -51,14 +52,19 @@ export function AttentionSection({ tasks, goals, allGoals, taskRuns, onApprove, 
     const denied = tasks.filter(t => t.status === 'reviewed' && !!t.reason && /denied/i.test(t.reason));
     const blocked = tasks.filter(t => t.status === 'blocked');
 
-    // Build combined verify items: goals first, then tasks
+    // Split checking tasks: validation-blocked vs normal verification
+    const validationBlocked = checkingTasks.filter(isValidationBlock);
+    const normalChecking = checkingTasks.filter(t => !isValidationBlock(t));
+
+    // Build combined verify items: goals first, then normal checking tasks
     const verifyItems: AttentionItem[] = [
       ...checkingGoals.map(g => ({ type: 'goal' as const, item: g })),
-      ...checkingTasks.map(t => ({ type: 'task' as const, item: t })),
+      ...normalChecking.map(t => ({ type: 'task' as const, item: t })),
     ];
 
     const result: AttentionGroup[] = [];
-    if (verifyItems.length > 0) result.push({ key: 'verify', label: 'Verify completed work', icon: <CheckCircle2 className="h-3 w-3" />, iconClass: 'text-violet-500', tasks: checkingTasks, items: verifyItems });
+    if (validationBlocked.length > 0) result.push({ key: 'mismatch', label: 'Resolve mismatches', icon: <ShieldAlert className="h-3 w-3" />, iconClass: 'text-orange-500', tasks: validationBlocked });
+    if (verifyItems.length > 0) result.push({ key: 'verify', label: 'Verify completed work', icon: <CheckCircle2 className="h-3 w-3" />, iconClass: 'text-violet-500', tasks: normalChecking, items: verifyItems });
     if (pending.length > 0) result.push({ key: 'approve', label: 'Approve', icon: <ShieldCheck className="h-3 w-3" />, iconClass: 'text-amber-500', tasks: pending });
     if (ready.length > 0) result.push({ key: 'start', label: 'Ready to start', icon: <Play className="h-3 w-3" />, iconClass: 'text-emerald-500', tasks: ready });
     if (denied.length > 0) result.push({ key: 'revise', label: 'Needs revision', icon: <RotateCcw className="h-3 w-3" />, iconClass: 'text-destructive', tasks: denied });
@@ -276,6 +282,31 @@ export function AttentionSection({ tasks, goals, allGoals, taskRuns, onApprove, 
                             Unblock
                           </Button>
                         )}
+                        {group.key === 'mismatch' && onMarkDone && onRequestRevision && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-[10px] text-destructive hover:bg-destructive/10"
+                              disabled={isBusy}
+                              onClick={() => onRequestRevision(task.id, 'Fix the deviations from plan')}
+                            >
+                              <RotateCcw className="mr-1 h-2.5 w-2.5" />
+                              Fix It
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-[10px] text-emerald-500 hover:bg-emerald-500/10"
+                              disabled={isBusy}
+                              onClick={() => onMarkDone(task.id)}
+                              title="Accept the deviation and mark done anyway"
+                            >
+                              <CheckCircle2 className="mr-1 h-2.5 w-2.5" />
+                              Accept
+                            </Button>
+                          </>
+                        )}
                         {group.key === 'verify' && onMarkDone && onRequestRevision && (
                           <>
                             <Button
@@ -311,6 +342,12 @@ export function AttentionSection({ tasks, goals, allGoals, taskRuns, onApprove, 
                         )}
                       </div>
                     </div>
+                    {group.key === 'mismatch' && task.reason && (
+                      <div className="mt-1 ml-2 px-2 py-1.5 rounded bg-orange-500/5 border border-orange-500/20">
+                        <div className="text-[9px] font-medium uppercase tracking-wide text-orange-500/70 mb-0.5">Validation Issue</div>
+                        <div className="text-xs text-foreground/80 whitespace-pre-wrap">{task.reason}</div>
+                      </div>
+                    )}
                     {group.key === 'verify' && task.result && (
                       <div className="mt-1 ml-2 px-2 py-1.5 rounded bg-muted/30 border border-border/30">
                         <div className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground/70 mb-0.5">Result</div>

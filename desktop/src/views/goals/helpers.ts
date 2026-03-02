@@ -14,11 +14,14 @@ export type Goal = {
   updatedAt: string;
 };
 
+export type TaskType = 'implementation' | 'audit' | 'research' | 'exploration' | 'design' | 'discovery';
+
 export type Task = {
   id: string;
   goalId?: string;
   title: string;
   status: TaskStatus;
+  taskType?: TaskType;
   plan?: string;
   planDocPath?: string;
   result?: string;
@@ -158,6 +161,45 @@ export function getStatusBadge(label: string): { bg: string; text: string } {
     default:
       return { bg: 'bg-muted', text: 'text-muted-foreground' };
   }
+}
+
+// task type inference (mirrors backend logic for display)
+const TYPE_KEYWORDS: Record<string, string[]> = {
+  audit: ['audit', 'review', 'assess', 'evaluate', 'inspect'],
+  research: ['research', 'investigate', 'study', 'analyze'],
+  exploration: ['exploration', 'explore', 'discover', 'map out', 'survey'],
+  design: ['design', 'architect', 'blueprint', 'wireframe'],
+  discovery: ['discovery', 'spike', 'proof of concept', 'poc'],
+};
+
+export function inferTaskType(title: string): TaskType {
+  const lower = title.toLowerCase();
+  for (const [type, keywords] of Object.entries(TYPE_KEYWORDS)) {
+    for (const kw of keywords) {
+      if (lower.includes(kw)) return type as TaskType;
+    }
+  }
+  return 'implementation';
+}
+
+export function getTaskTypeBadge(type: TaskType): { bg: string; text: string; label: string } {
+  switch (type) {
+    case 'audit': return { bg: 'bg-orange-500/15', text: 'text-orange-500', label: 'audit' };
+    case 'research': return { bg: 'bg-blue-500/15', text: 'text-blue-500', label: 'research' };
+    case 'exploration': return { bg: 'bg-cyan-500/15', text: 'text-cyan-500', label: 'explore' };
+    case 'design': return { bg: 'bg-purple-500/15', text: 'text-purple-500', label: 'design' };
+    case 'discovery': return { bg: 'bg-teal-500/15', text: 'text-teal-500', label: 'discovery' };
+    case 'implementation': return { bg: 'bg-muted', text: 'text-muted-foreground', label: 'impl' };
+  }
+}
+
+// Check if a task's reason indicates a validation failure
+export function isValidationBlock(task: Task): boolean {
+  return task.status === 'checking' && !!task.reason && (
+    task.reason.includes('Plan-vs-delivery mismatch')
+    || task.reason.includes('Completion blocked')
+    || task.reason.includes('follow-up tasks')
+  );
 }
 
 // stable goal colors — deterministic from id, won't shift when goals reorder

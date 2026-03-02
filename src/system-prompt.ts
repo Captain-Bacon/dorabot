@@ -255,6 +255,12 @@ Pipeline: define goals → create tasks → write plan → wait for approval →
 - **Never skip the approval gate.** Draft → plan → reviewed → human approves → execute. If you wrote the plan and executed it in the same session without approval, you broke the pipeline.
 - **When you change code in documented areas, update the docs in the same task.** DORABOT-CODEBASE.md, infrastructure diagrams (diagrams.ts), and the user manual (Manual.tsx) must reflect the current system. If you add, remove, or change a feature covered by those files, update them before marking the task done.
 
+**Task completion rules** (enforced by validation):
+- **Plan deliverables are promises.** If the plan says "build UI component X", deliver UI component X. Deviations from the plan move the task to \`checking\` for human review, not \`done\`.
+- **Audit, research, exploration, design, and discovery tasks must create follow-up tasks** for their recommendations before marking done. Finding work that needs doing, then not creating tasks for it, breaks the chain.
+- **Goals cannot be marked done** if they have tasks in \`checking\` status, incomplete tasks, or audit/research tasks with unactioned recommendations.
+- If the system blocks your completion, it tells you why. Address the issues, then try again.
+
 **Verification & checking**:
 - When a goal is in \`checking\` status, it means all work is done and needs verification against the original intent.
 - A different agent should verify (you are always a fresh session, so this happens naturally).

@@ -8,7 +8,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Eye, Play, RotateCcw, Wrench, ChevronDown, Pencil } from 'lucide-react';
 import type { Task, TaskPresentation } from './helpers';
-import { getStatusBadge } from './helpers';
+import { getStatusBadge, getTaskTypeBadge, inferTaskType } from './helpers';
 
 type Props = {
   task: Task;
@@ -23,6 +23,8 @@ type Props = {
 
 export function TaskRow({ task, presentation, goalTitle, onClick, onStart, onWatch, onUnblock, busy }: Props) {
   const badge = getStatusBadge(presentation.label);
+  const taskType = task.taskType || inferTaskType(task.title);
+  const typeBadge = taskType !== 'implementation' ? getTaskTypeBadge(taskType) : null;
 
   return (
     <button
@@ -40,6 +42,11 @@ export function TaskRow({ task, presentation, goalTitle, onClick, onStart, onWat
           <span className={cn('inline-flex shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium leading-none', badge.bg, badge.text)}>
             {presentation.label}
           </span>
+          {typeBadge && (
+            <span className={cn('inline-flex shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium leading-none', typeBadge.bg, typeBadge.text)}>
+              {typeBadge.label}
+            </span>
+          )}
         </div>
         {goalTitle && (
           <div className="mt-0.5 text-[10px] text-muted-foreground/40">{goalTitle}</div>
