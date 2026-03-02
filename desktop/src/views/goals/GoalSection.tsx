@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
 import { ChevronRight, MoreHorizontal, Plus, Pause, Play, Check, Trash2, RotateCcw, Eye } from 'lucide-react';
 import { TaskRow } from './TaskRow';
 import type { Goal, Task, TaskPresentation } from './helpers';
-import { getGoalColor, getStatusBadge } from './helpers';
+import { getGoalColor, getStatusBadge, GOAL_STATUS_LABELS, relativeTime } from './helpers';
 
 type Props = {
   goal: Goal;
@@ -76,6 +76,10 @@ export function GoalSection({
 
   const color = getGoalColor(goal.id);
 
+  // Progress calculation
+  const completedCount = allTasks.filter(t => t.status === 'done').length;
+  const totalCount = allTasks.length;
+
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <div className="group">
@@ -87,14 +91,20 @@ export function GoalSection({
               open && 'rotate-90',
             )} />
             <span className="text-xs font-medium truncate">{goal.title}</span>
-            {goal.status === 'holding' && (
-              <span className="text-[9px] text-amber-500 shrink-0">holding</span>
+            {goal.status !== 'done' && goal.status !== 'active' && (
+              <span className={cn(
+                'text-[9px] shrink-0',
+                goal.status === 'holding' && 'text-amber-500',
+                goal.status === 'developing' && 'text-violet-500',
+                goal.status === 'checking' && 'text-amber-500',
+              )}>
+                {GOAL_STATUS_LABELS[goal.status]}
+              </span>
             )}
-            {goal.status === 'developing' && (
-              <span className="text-[9px] text-violet-500 shrink-0">developing</span>
-            )}
-            {goal.status === 'checking' && (
-              <span className="text-[9px] text-amber-500 shrink-0">checking</span>
+            {totalCount > 0 && (
+              <span className="text-[10px] text-muted-foreground/50 shrink-0">
+                {completedCount}/{totalCount}
+              </span>
             )}
             {!open && statusChips.length > 0 && (
               <div className="flex items-center gap-1.5 ml-auto shrink-0">
@@ -184,6 +194,16 @@ export function GoalSection({
 
       <CollapsibleContent>
         <div className="ml-4 border-l-2 border-border/40 pl-3 mb-1">
+          {goal.description && (
+            <div className="px-3 py-2 text-xs text-muted-foreground/70 border-l-2 border-border/30 mb-2 ml-1">
+              {goal.description.length > 200 ? goal.description.slice(0, 200) + '...' : goal.description}
+            </div>
+          )}
+          {goal.updatedAt && (
+            <div className="px-3 pb-1 text-[9px] text-muted-foreground/40">
+              Updated {relativeTime(goal.updatedAt)}
+            </div>
+          )}
           {activeTasks.map(task => (
             <TaskRow
               key={task.id}

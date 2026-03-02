@@ -72,7 +72,18 @@ export function AttentionSection({ tasks, goals, allGoals, taskRuns, onApprove, 
     return result;
   }, [tasks, allGoals]);
 
-  if (groups.length === 0) return null;
+  if (groups.length === 0) {
+    return (
+      <div className="rounded-lg border border-primary/20 bg-primary/[0.03]">
+        <div className="flex items-center gap-2 px-4 py-2.5">
+          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+          <span className="text-xs text-muted-foreground">
+            All clear — nothing needs your attention right now
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   const total = groups.reduce((sum, g) => (g.items ? g.items.length : g.tasks.length) + sum, 0);
 

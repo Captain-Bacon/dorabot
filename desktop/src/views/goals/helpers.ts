@@ -135,6 +135,42 @@ export function errorText(err: unknown): string {
   return String(err || 'unknown error');
 }
 
+// Human-friendly status labels
+export const GOAL_STATUS_LABELS: Record<GoalStatus, string> = {
+  holding: 'On hold',
+  developing: 'Planning',
+  active: 'In progress',
+  checking: 'Verifying',
+  done: 'Complete',
+};
+
+export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
+  draft: 'Draft',
+  reviewed: 'In review',
+  approved: 'Ready',
+  running: 'Running',
+  checking: 'Verifying',
+  done: 'Done',
+  blocked: 'Blocked',
+  cancelled: 'Cancelled',
+};
+
+// Relative time display
+export function relativeTime(isoString: string): string {
+  const date = new Date(isoString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  if (diffMs < 0) return 'just now';
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return `${Math.floor(diffDays / 7)}w ago`;
+}
+
 // status badge colors for tasks
 export function getStatusBadge(label: string): { bg: string; text: string } {
   switch (label) {
