@@ -39,27 +39,64 @@ const TIMEZONES = [
   'Pacific/Auckland',
 ];
 
-function detectCurrentMode(schedule: { timezone?: string; workingHours?: { start: number; end: number }; offPeakHours?: { start: number; end: number } } | undefined): 'working' | 'offpeak' | 'overnight' {
+function detectCurrentMode(schedule: { timezone?: string; modes?: Record<string, any>; slots?: PulseSlot[]; workingHours?: { start: number; end: number }; offPeakHours?: { start: number; end: number } } | undefined): string {
   const tz = schedule?.timezone || 'UTC';
   const now = new Date();
-  const formatter = new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: tz });
-  const hour = parseInt(formatter.format(now), 10);
+  const hourFormatter = new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: tz });
+  const hour = parseInt(hourFormatter.format(now), 10);
 
-  const workingStart = schedule?.workingHours?.start ?? 9;
-  const workingEnd = schedule?.workingHours?.end ?? 18;
-  const offPeakStart = schedule?.offPeakHours?.start ?? 18;
-  const offPeakEnd = schedule?.offPeakHours?.end ?? 23;
+  // Get day of week (1=Mon, 7=Sun) - use weekday option
+  const dayFormatter = new Intl.DateTimeFormat('en-GB', { weekday: 'short', timeZone: tz });
+  const dayStr = dayFormatter.format(now);
+  const dayMap: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
+  const day = dayMap[dayStr] || 1;
+
+  // If slots are defined, use slot-based detection
+  if (schedule?.slots && schedule.slots.length > 0) {
+    for (const slot of schedule.slots) {
+      if (slot.days.includes(day) && hour >= slot.start && hour < slot.end) {
+        return slot.mode;
+      }
+    }
+  }
+
+  // Fall back to legacy hour-based detection
+  const workingStart = schedule?.modes?.working?.hours?.start ?? schedule?.workingHours?.start ?? 9;
+  const workingEnd = schedule?.modes?.working?.hours?.end ?? schedule?.workingHours?.end ?? 18;
+  const offPeakStart = schedule?.modes?.offpeak?.hours?.start ?? schedule?.offPeakHours?.start ?? 18;
+  const offPeakEnd = schedule?.modes?.offpeak?.hours?.end ?? schedule?.offPeakHours?.end ?? 23;
 
   if (hour >= workingStart && hour < workingEnd) return 'working';
   if (hour >= offPeakStart && hour < offPeakEnd) return 'offpeak';
   return 'overnight';
 }
 
-const MODE_LABELS: Record<string, { label: string; color: string; description: string }> = {
+const BUILTIN_MODE_LABELS: Record<string, { label: string; color: string; description: string }> = {
   working: { label: 'Working', color: 'bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30', description: 'Full engagement: all priorities, proactive proposals' },
   offpeak: { label: 'Off-peak', color: 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/30', description: 'Reduced: core priorities only, fewer proposals' },
   overnight: { label: 'Overnight', color: 'bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30', description: 'Minimal: critical items only' },
 };
+
+function getModeLabel(modeName: string, modeConfig?: { priorityLevel?: string; description?: string }): { label: string; color: string; description: string } {
+  // Check built-in modes first
+  if (BUILTIN_MODE_LABELS[modeName]) {
+    return BUILTIN_MODE_LABELS[modeName];
+  }
+
+  // Custom mode - derive from priority level
+  const priorityLevel = modeConfig?.priorityLevel || 'full';
+  const colorMap: Record<string, string> = {
+    full: 'bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30',
+    reduced: 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/30',
+    minimal: 'bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30',
+  };
+
+  return {
+    label: modeName.charAt(0).toUpperCase() + modeName.slice(1),
+    color: colorMap[priorityLevel] || colorMap.full,
+    description: modeConfig?.description || `${priorityLevel} priority mode`,
+  };
+}
 
 type PulseStatus = {
   enabled: boolean;
@@ -83,7 +120,8 @@ export function Automations({ gateway }: AutomationsProps) {
   const [pulseRunStartedAt, setPulseRunStartedAt] = useState<number | null>(null);
   const [showPulseSchedule, setShowPulseSchedule] = useState(false);
   const [showPulseModes, setShowPulseModes] = useState(false);
-  const [currentMode, setCurrentMode] = useState<'working' | 'offpeak' | 'overnight'>('working');
+  const [currentMode, setCurrentMode] = useState<string>('working');
+  const [modes, setModes] = useState<Record<string, any>>({});
   const [newItem, setNewItem] = useState({
     summary: '',
     message: '',
@@ -117,17 +155,32 @@ export function Automations({ gateway }: AutomationsProps) {
     }
   }, [gateway.connectionState, gateway.rpc]);
 
+  const loadModes = useCallback(async () => {
+    if (gateway.connectionState !== 'connected') return;
+    try {
+      const result = await gateway.rpc('pulseSchedule.modes.list') as Record<string, any>;
+      setModes(result);
+    } catch (err) {
+      console.error('failed to load modes:', err);
+    }
+  }, [gateway.connectionState, gateway.rpc]);
+
   useEffect(() => {
     loadItems();
     loadPulseStatus();
-  }, [loadItems, loadPulseStatus]);
+    loadModes();
+  }, [loadItems, loadPulseStatus, loadModes]);
 
   // detect current pulse mode
   useEffect(() => {
     const cfg = gateway.configData as Record<string, any> | null;
     const schedule = cfg?.pulseSchedule;
     setCurrentMode(detectCurrentMode(schedule));
-    const interval = setInterval(() => setCurrentMode(detectCurrentMode(schedule)), 60000);
+    const interval = setInterval(() => {
+      const cfg = gateway.configData as Record<string, any> | null;
+      const schedule = cfg?.pulseSchedule;
+      setCurrentMode(detectCurrentMode(schedule));
+    }, 60000);
     return () => clearInterval(interval);
   }, [gateway.configData]);
 
@@ -339,11 +392,11 @@ export function Automations({ gateway }: AutomationsProps) {
                 <>
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
-                      <Badge className={`text-[9px] h-4 px-1.5 border-0 ${MODE_LABELS[currentMode].color}`}>
-                        {MODE_LABELS[currentMode].label}
+                      <Badge className={`text-[9px] h-4 px-1.5 border-0 ${getModeLabel(currentMode, modes[currentMode]).color}`}>
+                        {getModeLabel(currentMode, modes[currentMode]).label}
                       </Badge>
                       <span className="text-[10px] text-muted-foreground">
-                        {pulse.interval} • {MODE_LABELS[currentMode].description}
+                        {pulse.interval} • {getModeLabel(currentMode, modes[currentMode]).description}
                       </span>
                       <Button
                         variant="outline"
@@ -391,7 +444,7 @@ export function Automations({ gateway }: AutomationsProps) {
                   </div>
 
                   {showPulseModes && <PulseModeSettings gateway={gateway} />}
-                  {showPulseSchedule && <PulseScheduleSettings gateway={gateway} currentMode={currentMode} />}
+                  {showPulseSchedule && <PulseScheduleSettings gateway={gateway} currentMode={currentMode} currentModeConfig={modes[currentMode]} />}
 
                   {!hasConnectedChannel && (
                     <div className="flex items-center gap-2 p-2 rounded bg-warning/10 border border-warning/20">
@@ -564,7 +617,7 @@ type PulseSlot = {
   end: number;
 };
 
-function PulseScheduleSettings({ gateway, currentMode }: { gateway: ReturnType<typeof useGateway>; currentMode: 'working' | 'offpeak' | 'overnight' }) {
+function PulseScheduleSettings({ gateway, currentMode, currentModeConfig }: { gateway: ReturnType<typeof useGateway>; currentMode: string; currentModeConfig?: any }) {
   const [slots, setSlots] = useState<PulseSlot[]>([]);
   const [modes, setModes] = useState<Record<string, any>>({});
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -691,7 +744,7 @@ function PulseScheduleSettings({ gateway, currentMode }: { gateway: ReturnType<t
   return (
     <div className="space-y-3 pt-2 border-t border-border">
       <div className="text-[10px] text-muted-foreground bg-muted/30 rounded px-2 py-1.5">
-        Current: {MODE_LABELS[currentMode]?.label || currentMode}
+        Current: {getModeLabel(currentMode, currentModeConfig).label}
       </div>
 
       {(creatingSlot || editingIndex !== null) && (
