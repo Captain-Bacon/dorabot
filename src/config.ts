@@ -57,11 +57,21 @@ export type CalendarConfig = {
   tickIntervalMs?: number;
 };
 
+export type PulseModeConfig = {
+  hours?: { start: number; end: number };  // hour of day (0-23)
+  interval?: string;  // e.g. '30m', '2h', '6h'
+};
+
 export type PulseScheduleConfig = {
   timezone?: string;
-  workingHours?: { start: number; end: number };  // hour of day (0-23)
-  offPeakHours?: { start: number; end: number };  // hour of day (0-23)
-  // overnight is implied: anything outside working + off-peak
+  modes?: {
+    working?: PulseModeConfig;
+    offpeak?: PulseModeConfig;
+    overnight?: PulseModeConfig;
+  };
+  // Legacy fields (for migration):
+  workingHours?: { start: number; end: number };
+  offPeakHours?: { start: number; end: number };
 };
 
 export type WhatsAppChannelConfig = {
@@ -229,8 +239,35 @@ export async function loadConfig(configPath?: string): Promise<Config> {
   return DEFAULT_CONFIG;
 }
 
+function migratePulseScheduleConfig(schedule: PulseScheduleConfig | undefined): PulseScheduleConfig | undefined {
+  if (!schedule) return undefined;
+
+  // Already migrated
+  if (schedule.modes) return schedule;
+
+  // Migrate from legacy format
+  const migrated: PulseScheduleConfig = {
+    timezone: schedule.timezone,
+    modes: {
+      working: {
+        hours: schedule.workingHours || { start: 9, end: 18 },
+        interval: '30m',  // default for working mode
+      },
+      offpeak: {
+        hours: schedule.offPeakHours || { start: 18, end: 23 },
+        interval: '2h',  // default for off-peak mode
+      },
+      overnight: {
+        interval: '6h',  // default for overnight mode
+      },
+    },
+  };
+
+  return migrated;
+}
+
 function mergeConfig(base: Config, override: Partial<Config>): Config {
-  return {
+  const merged = {
     ...base,
     ...override,
     provider: {
@@ -250,6 +287,13 @@ function mergeConfig(base: Config, override: Partial<Config>): Config {
       ...override.agents,
     },
   };
+
+  // Migrate pulseSchedule if present
+  if (override.pulseSchedule) {
+    merged.pulseSchedule = migratePulseScheduleConfig(override.pulseSchedule);
+  }
+
+  return merged;
 }
 
 export function getConfigValue<K extends keyof Config>(config: Config, key: K): Config[K] {

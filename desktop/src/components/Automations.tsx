@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils';
 import { Plus, X, Play, Pause, Trash2, ChevronDown, ChevronRight, Clock, Zap, Activity, Radio, Timer } from 'lucide-react';
 
 const PULSE_SCHEDULE_ID = 'autonomy-pulse';
-const PULSE_INTERVALS = ['15m', '30m', '1h', '2h'];
+const PULSE_INTERVALS = ['15m', '30m', '1h', '2h', '4h', '6h', '8h'];
 
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => {
   const suffix = i >= 12 ? 'PM' : 'AM';
@@ -546,12 +546,27 @@ export function Automations({ gateway }: AutomationsProps) {
 
 function PulseScheduleSettings({ gateway, currentMode }: { gateway: ReturnType<typeof useGateway>; currentMode: 'working' | 'offpeak' | 'overnight' }) {
   const cfg = gateway.configData as Record<string, any> | null;
-  const schedule = cfg?.pulseSchedule as { timezone?: string; workingHours?: { start: number; end: number }; offPeakHours?: { start: number; end: number } } | undefined;
+  const schedule = cfg?.pulseSchedule as {
+    timezone?: string;
+    modes?: {
+      working?: { hours?: { start: number; end: number }; interval?: string };
+      offpeak?: { hours?: { start: number; end: number }; interval?: string };
+      overnight?: { interval?: string };
+    };
+    workingHours?: { start: number; end: number };
+    offPeakHours?: { start: number; end: number };
+  } | undefined;
   const timezone = schedule?.timezone || 'Europe/London';
-  const workingStart = schedule?.workingHours?.start ?? 9;
-  const workingEnd = schedule?.workingHours?.end ?? 18;
-  const offPeakStart = schedule?.offPeakHours?.start ?? 18;
-  const offPeakEnd = schedule?.offPeakHours?.end ?? 23;
+
+  // Use new schema if available, fall back to legacy
+  const workingStart = schedule?.modes?.working?.hours?.start ?? schedule?.workingHours?.start ?? 9;
+  const workingEnd = schedule?.modes?.working?.hours?.end ?? schedule?.workingHours?.end ?? 18;
+  const offPeakStart = schedule?.modes?.offpeak?.hours?.start ?? schedule?.offPeakHours?.start ?? 18;
+  const offPeakEnd = schedule?.modes?.offpeak?.hours?.end ?? schedule?.offPeakHours?.end ?? 23;
+
+  const workingInterval = schedule?.modes?.working?.interval ?? '30m';
+  const offpeakInterval = schedule?.modes?.offpeak?.interval ?? '2h';
+  const overnightInterval = schedule?.modes?.overnight?.interval ?? '6h';
 
   const mode = MODE_LABELS[currentMode];
 
@@ -595,7 +610,7 @@ function PulseScheduleSettings({ gateway, currentMode }: { gateway: ReturnType<t
           <Label className="text-[10px] font-medium">working hours</Label>
         </div>
         <div className="flex items-center gap-2">
-          <Select value={String(workingStart)} onValueChange={v => set('pulseSchedule.workingHours', { start: parseInt(v), end: workingEnd })}>
+          <Select value={String(workingStart)} onValueChange={v => set('pulseSchedule.modes.working.hours', { start: parseInt(v), end: workingEnd })}>
             <SelectTrigger className="h-7 text-[11px] flex-1">
               <SelectValue />
             </SelectTrigger>
@@ -606,13 +621,26 @@ function PulseScheduleSettings({ gateway, currentMode }: { gateway: ReturnType<t
             </SelectContent>
           </Select>
           <span className="text-[10px] text-muted-foreground">to</span>
-          <Select value={String(workingEnd)} onValueChange={v => set('pulseSchedule.workingHours', { start: workingStart, end: parseInt(v) })}>
+          <Select value={String(workingEnd)} onValueChange={v => set('pulseSchedule.modes.working.hours', { start: workingStart, end: parseInt(v) })}>
             <SelectTrigger className="h-7 text-[11px] flex-1">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {HOUR_OPTIONS.map(h => (
                 <SelectItem key={h.value} value={h.value} className="text-[11px]">{h.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center gap-2 pl-3.5">
+          <span className="text-[10px] text-muted-foreground">every</span>
+          <Select value={workingInterval} onValueChange={v => set('pulseSchedule.modes.working.interval', v)}>
+            <SelectTrigger className="h-7 text-[11px] w-20">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PULSE_INTERVALS.map(iv => (
+                <SelectItem key={iv} value={iv} className="text-[11px]">{iv}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -625,7 +653,7 @@ function PulseScheduleSettings({ gateway, currentMode }: { gateway: ReturnType<t
           <Label className="text-[10px] font-medium">off-peak hours</Label>
         </div>
         <div className="flex items-center gap-2">
-          <Select value={String(offPeakStart)} onValueChange={v => set('pulseSchedule.offPeakHours', { start: parseInt(v), end: offPeakEnd })}>
+          <Select value={String(offPeakStart)} onValueChange={v => set('pulseSchedule.modes.offpeak.hours', { start: parseInt(v), end: offPeakEnd })}>
             <SelectTrigger className="h-7 text-[11px] flex-1">
               <SelectValue />
             </SelectTrigger>
@@ -636,7 +664,7 @@ function PulseScheduleSettings({ gateway, currentMode }: { gateway: ReturnType<t
             </SelectContent>
           </Select>
           <span className="text-[10px] text-muted-foreground">to</span>
-          <Select value={String(offPeakEnd)} onValueChange={v => set('pulseSchedule.offPeakHours', { start: offPeakStart, end: parseInt(v) })}>
+          <Select value={String(offPeakEnd)} onValueChange={v => set('pulseSchedule.modes.offpeak.hours', { start: offPeakStart, end: parseInt(v) })}>
             <SelectTrigger className="h-7 text-[11px] flex-1">
               <SelectValue />
             </SelectTrigger>
@@ -647,15 +675,41 @@ function PulseScheduleSettings({ gateway, currentMode }: { gateway: ReturnType<t
             </SelectContent>
           </Select>
         </div>
+        <div className="flex items-center gap-2 pl-3.5">
+          <span className="text-[10px] text-muted-foreground">every</span>
+          <Select value={offpeakInterval} onValueChange={v => set('pulseSchedule.modes.offpeak.interval', v)}>
+            <SelectTrigger className="h-7 text-[11px] w-20">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PULSE_INTERVALS.map(iv => (
+                <SelectItem key={iv} value={iv} className="text-[11px]">{iv}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
-      <div className="space-y-1">
+      <div className="space-y-2">
         <div className="flex items-center gap-1.5">
           <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
           <Label className="text-[10px] font-medium">overnight</Label>
         </div>
         <div className="text-[11px] text-muted-foreground pl-3.5">
           {fmtHour(offPeakEnd)} to {fmtHour(workingStart)} (calculated)
+        </div>
+        <div className="flex items-center gap-2 pl-3.5">
+          <span className="text-[10px] text-muted-foreground">every</span>
+          <Select value={overnightInterval} onValueChange={v => set('pulseSchedule.modes.overnight.interval', v)}>
+            <SelectTrigger className="h-7 text-[11px] w-20">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PULSE_INTERVALS.map(iv => (
+                <SelectItem key={iv} value={iv} className="text-[11px]">{iv}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
     </div>

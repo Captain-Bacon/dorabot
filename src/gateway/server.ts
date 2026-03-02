@@ -54,7 +54,7 @@ import { isCodexInstalled, hasCodexAuth, onCodexAuthRequired } from '../provider
 import type { ProviderName } from '../config.js';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { classifyToolCall, cleanToolName, isToolAllowed, type Tier } from './tool-policy.js';
-import { AUTONOMOUS_SCHEDULE_ID, buildAutonomousCalendarItem, PULSE_INTERVALS, DEFAULT_PULSE_INTERVAL, pulseIntervalToRrule, rruleToPulseInterval } from '../autonomous.js';
+import { AUTONOMOUS_SCHEDULE_ID, buildAutonomousCalendarItem, PULSE_INTERVALS, pulseIntervalToRrule, rruleToPulseInterval, detectPulseMode } from '../autonomous.js';
 import { ensureWorktreeForPlan, getWorktreeStats, mergeWorktreeBranch, pushWorktreePr, removeWorktree } from '../worktree/manager.js';
 import {
   DORABOT_DIR,
@@ -3725,11 +3725,20 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
 
         case 'pulse.status': {
           const pulseItem = scheduler?.listItems().find(i => i.id === AUTONOMOUS_SCHEDULE_ID);
+          let interval = '30m';  // fallback default
+          if (pulseItem) {
+            interval = rruleToPulseInterval(pulseItem.rrule || '');
+          } else {
+            // Derive from current mode config
+            const mode = detectPulseMode(config.pulseSchedule, config.pulseSchedule?.timezone);
+            interval = config.pulseSchedule?.modes?.[mode]?.interval ||
+                      (mode === 'working' ? '30m' : mode === 'offpeak' ? '2h' : '6h');
+          }
           return {
             id,
             result: {
               enabled: !!pulseItem?.enabled,
-              interval: pulseItem ? rruleToPulseInterval(pulseItem.rrule || '') : DEFAULT_PULSE_INTERVAL,
+              interval,
               lastRunAt: pulseItem?.lastRunAt || null,
               nextRunAt: pulseItem?.nextRunAt || null,
             },
@@ -5346,6 +5355,88 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
               const tz = config.pulseSchedule.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
               const item = buildAutonomousCalendarItem(tz, undefined, config.pulseSchedule);
               scheduler.updateItem(AUTONOMOUS_SCHEDULE_ID, { message: item.message });
+            }
+            broadcast({ event: 'config.update', data: { key, value } });
+            return { id, result: { key, value } };
+          }
+
+          // New per-mode pulse config handlers
+          if (key === 'pulseSchedule.modes.working.hours' && typeof value === 'object' && value !== null) {
+            const v = value as { start?: number; end?: number };
+            if (typeof v.start !== 'number' || typeof v.end !== 'number') return { id, error: 'hours requires start and end (0-23)' };
+            if (v.start < 0 || v.start > 23 || v.end < 0 || v.end > 23) return { id, error: 'hours must be 0-23' };
+            if (!config.pulseSchedule) config.pulseSchedule = {};
+            if (!config.pulseSchedule.modes) config.pulseSchedule.modes = {};
+            if (!config.pulseSchedule.modes.working) config.pulseSchedule.modes.working = {};
+            config.pulseSchedule.modes.working.hours = { start: v.start, end: v.end };
+            saveConfig(config);
+            if (scheduler && config.autonomy === 'autonomous') {
+              const tz = config.pulseSchedule.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+              const item = buildAutonomousCalendarItem(tz, undefined, config.pulseSchedule);
+              scheduler.updateItem(AUTONOMOUS_SCHEDULE_ID, { message: item.message, rrule: item.rrule });
+            }
+            broadcast({ event: 'config.update', data: { key, value } });
+            return { id, result: { key, value } };
+          }
+
+          if (key === 'pulseSchedule.modes.working.interval' && typeof value === 'string') {
+            if (!config.pulseSchedule) config.pulseSchedule = {};
+            if (!config.pulseSchedule.modes) config.pulseSchedule.modes = {};
+            if (!config.pulseSchedule.modes.working) config.pulseSchedule.modes.working = {};
+            config.pulseSchedule.modes.working.interval = value;
+            saveConfig(config);
+            if (scheduler && config.autonomy === 'autonomous') {
+              const tz = config.pulseSchedule.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+              const item = buildAutonomousCalendarItem(tz, undefined, config.pulseSchedule);
+              scheduler.updateItem(AUTONOMOUS_SCHEDULE_ID, { rrule: item.rrule });
+            }
+            broadcast({ event: 'config.update', data: { key, value } });
+            return { id, result: { key, value } };
+          }
+
+          if (key === 'pulseSchedule.modes.offpeak.hours' && typeof value === 'object' && value !== null) {
+            const v = value as { start?: number; end?: number };
+            if (typeof v.start !== 'number' || typeof v.end !== 'number') return { id, error: 'hours requires start and end (0-23)' };
+            if (v.start < 0 || v.start > 23 || v.end < 0 || v.end > 23) return { id, error: 'hours must be 0-23' };
+            if (!config.pulseSchedule) config.pulseSchedule = {};
+            if (!config.pulseSchedule.modes) config.pulseSchedule.modes = {};
+            if (!config.pulseSchedule.modes.offpeak) config.pulseSchedule.modes.offpeak = {};
+            config.pulseSchedule.modes.offpeak.hours = { start: v.start, end: v.end };
+            saveConfig(config);
+            if (scheduler && config.autonomy === 'autonomous') {
+              const tz = config.pulseSchedule.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+              const item = buildAutonomousCalendarItem(tz, undefined, config.pulseSchedule);
+              scheduler.updateItem(AUTONOMOUS_SCHEDULE_ID, { message: item.message, rrule: item.rrule });
+            }
+            broadcast({ event: 'config.update', data: { key, value } });
+            return { id, result: { key, value } };
+          }
+
+          if (key === 'pulseSchedule.modes.offpeak.interval' && typeof value === 'string') {
+            if (!config.pulseSchedule) config.pulseSchedule = {};
+            if (!config.pulseSchedule.modes) config.pulseSchedule.modes = {};
+            if (!config.pulseSchedule.modes.offpeak) config.pulseSchedule.modes.offpeak = {};
+            config.pulseSchedule.modes.offpeak.interval = value;
+            saveConfig(config);
+            if (scheduler && config.autonomy === 'autonomous') {
+              const tz = config.pulseSchedule.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+              const item = buildAutonomousCalendarItem(tz, undefined, config.pulseSchedule);
+              scheduler.updateItem(AUTONOMOUS_SCHEDULE_ID, { rrule: item.rrule });
+            }
+            broadcast({ event: 'config.update', data: { key, value } });
+            return { id, result: { key, value } };
+          }
+
+          if (key === 'pulseSchedule.modes.overnight.interval' && typeof value === 'string') {
+            if (!config.pulseSchedule) config.pulseSchedule = {};
+            if (!config.pulseSchedule.modes) config.pulseSchedule.modes = {};
+            if (!config.pulseSchedule.modes.overnight) config.pulseSchedule.modes.overnight = {};
+            config.pulseSchedule.modes.overnight.interval = value;
+            saveConfig(config);
+            if (scheduler && config.autonomy === 'autonomous') {
+              const tz = config.pulseSchedule.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+              const item = buildAutonomousCalendarItem(tz, undefined, config.pulseSchedule);
+              scheduler.updateItem(AUTONOMOUS_SCHEDULE_ID, { rrule: item.rrule });
             }
             broadcast({ event: 'config.update', data: { key, value } });
             return { id, result: { key, value } };

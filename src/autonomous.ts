@@ -11,19 +11,21 @@ const INTERVAL_TO_RRULE: Record<string, string> = {
   '30m': 'FREQ=MINUTELY;INTERVAL=30',
   '1h': 'FREQ=HOURLY;INTERVAL=1',
   '2h': 'FREQ=HOURLY;INTERVAL=2',
+  '4h': 'FREQ=HOURLY;INTERVAL=4',
+  '6h': 'FREQ=HOURLY;INTERVAL=6',
+  '8h': 'FREQ=HOURLY;INTERVAL=8',
 };
 export const PULSE_INTERVALS = Object.keys(INTERVAL_TO_RRULE);
-export const DEFAULT_PULSE_INTERVAL = '30m';
 
 export function pulseIntervalToRrule(interval: string): string {
-  return INTERVAL_TO_RRULE[interval] || INTERVAL_TO_RRULE[DEFAULT_PULSE_INTERVAL];
+  return INTERVAL_TO_RRULE[interval] || INTERVAL_TO_RRULE['30m'];
 }
 
 export function rruleToPulseInterval(rrule: string): string {
   for (const [key, value] of Object.entries(INTERVAL_TO_RRULE)) {
     if (rrule === value) return key;
   }
-  return DEFAULT_PULSE_INTERVAL;
+  return '30m';
 }
 
 export function detectPulseMode(scheduleConfig?: PulseScheduleConfig, timezone?: string): PulseMode {
@@ -31,10 +33,11 @@ export function detectPulseMode(scheduleConfig?: PulseScheduleConfig, timezone?:
   const now = DateTime.now().setZone(tz);
   const hour = now.hour;
 
-  const workingStart = scheduleConfig?.workingHours?.start ?? 9;
-  const workingEnd = scheduleConfig?.workingHours?.end ?? 18;
-  const offPeakStart = scheduleConfig?.offPeakHours?.start ?? 18;
-  const offPeakEnd = scheduleConfig?.offPeakHours?.end ?? 23;
+  // Use new schema if available, fall back to legacy
+  const workingStart = scheduleConfig?.modes?.working?.hours?.start ?? scheduleConfig?.workingHours?.start ?? 9;
+  const workingEnd = scheduleConfig?.modes?.working?.hours?.end ?? scheduleConfig?.workingHours?.end ?? 18;
+  const offPeakStart = scheduleConfig?.modes?.offpeak?.hours?.start ?? scheduleConfig?.offPeakHours?.start ?? 18;
+  const offPeakEnd = scheduleConfig?.modes?.offpeak?.hours?.end ?? scheduleConfig?.offPeakHours?.end ?? 23;
 
   // Working hours (default 9am-6pm)
   if (hour >= workingStart && hour < workingEnd) {
@@ -132,12 +135,20 @@ Stay focused. Before declaring "nothing to act on", verify: goals checked, tasks
 }
 
 export function buildAutonomousCalendarItem(timezone?: string, interval?: string, scheduleConfig?: PulseScheduleConfig) {
+  // If no explicit interval provided, derive from current mode
+  let effectiveInterval = interval;
+  if (!effectiveInterval) {
+    const mode = detectPulseMode(scheduleConfig, timezone);
+    effectiveInterval = scheduleConfig?.modes?.[mode]?.interval ||
+                       (mode === 'working' ? '30m' : mode === 'offpeak' ? '2h' : '6h');
+  }
+
   return {
     type: 'event' as const,
     summary: 'Autonomy pulse',
     description: 'Periodic autonomy pulse',
     dtstart: new Date().toISOString(),
-    rrule: pulseIntervalToRrule(interval || DEFAULT_PULSE_INTERVAL),
+    rrule: pulseIntervalToRrule(effectiveInterval),
     timezone,
     message: buildAutonomousPrompt(timezone, scheduleConfig),
     session: 'main' as const,
