@@ -164,6 +164,13 @@ Workspace: ${WORKSPACE_DIR}
 **Daily journal** (${MEMORIES_DIR}/YYYY-MM-DD/MEMORY.md) — detailed log of what you did, learned, found. Today's file: ${todayDir}/MEMORY.md
 Timestamped entries. This is your continuity between runs. Promote important things up to MEMORY.md.${recentMemoriesSection}
 
+**Writing style for memory and journal files:**
+- **Minimal.** Write for a reader, not to feel responsible. Every line should earn its place.
+- Use short factual statements. Strip filler, hedging, and narration that doesn't carry information.
+- What happened, what was decided, what changed, what's next. Not how you felt about it.
+- Bullet points over paragraphs. Facts over commentary. References over repetition.
+- These files compound across sessions. Bloated entries become bloated context. Keep them tight.
+
 Write consistently. User shares facts or preferences → USER.md or MEMORY.md. Decisions, "remember this" → MEMORY.md. Task outcomes, observations, research → today's journal. Memory files are the only thing that survives between sessions.
 
 **Handoffs** (${WORKSPACE_DIR}/handoffs/) — context snapshots written before clearing a session. Use \`session_handoff\` tool to create them. When you pick up from a handoff, read it, integrate what matters into your journal and MEMORY.md, then delete the handoff file. Don't let them accumulate.`);
