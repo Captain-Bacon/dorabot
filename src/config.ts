@@ -64,14 +64,17 @@ export type PulseModeConfig = {
   description?: string;  // optional description (max 100 chars)
 };
 
+export type PulseSlot = {
+  mode: string;  // reference to modes key
+  days: number[];  // 1=Mon, 2=Tue, ..., 7=Sun
+  start: number;  // hour 0-23
+  end: number;  // hour 0-24
+};
+
 export type PulseScheduleConfig = {
   timezone?: string;
   modes?: Record<string, PulseModeConfig>;  // dynamic mode dictionary
-  slots?: Array<{  // schedule slots (Phase 3)
-    days?: number[];  // 0=Sun, 1=Mon, etc
-    hours?: { start: number; end: number };
-    mode: string;  // reference to modes key
-  }>;
+  slots?: PulseSlot[];  // schedule slots (Phase 3)
   // Legacy fields (for migration):
   workingHours?: { start: number; end: number };
   offPeakHours?: { start: number; end: number };

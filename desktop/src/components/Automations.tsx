@@ -563,174 +563,275 @@ export function Automations({ gateway }: AutomationsProps) {
   );
 }
 
+type PulseSlot = {
+  mode: string;
+  days: number[];
+  start: number;
+  end: number;
+};
+
 function PulseScheduleSettings({ gateway, currentMode }: { gateway: ReturnType<typeof useGateway>; currentMode: 'working' | 'offpeak' | 'overnight' }) {
-  const cfg = gateway.configData as Record<string, any> | null;
-  const schedule = cfg?.pulseSchedule as {
-    timezone?: string;
-    modes?: {
-      working?: { hours?: { start: number; end: number }; interval?: string };
-      offpeak?: { hours?: { start: number; end: number }; interval?: string };
-      overnight?: { interval?: string };
-    };
-    workingHours?: { start: number; end: number };
-    offPeakHours?: { start: number; end: number };
-  } | undefined;
-  const timezone = schedule?.timezone || 'Europe/London';
+  const [slots, setSlots] = useState<PulseSlot[]>([]);
+  const [modes, setModes] = useState<Record<string, any>>({});
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [creatingSlot, setCreatingSlot] = useState(false);
+  const [formData, setFormData] = useState({
+    mode: '',
+    days: [] as number[],
+    start: 9,
+    end: 18
+  });
 
-  // Use new schema if available, fall back to legacy
-  const workingStart = schedule?.modes?.working?.hours?.start ?? schedule?.workingHours?.start ?? 9;
-  const workingEnd = schedule?.modes?.working?.hours?.end ?? schedule?.workingHours?.end ?? 18;
-  const offPeakStart = schedule?.modes?.offpeak?.hours?.start ?? schedule?.offPeakHours?.start ?? 18;
-  const offPeakEnd = schedule?.modes?.offpeak?.hours?.end ?? schedule?.offPeakHours?.end ?? 23;
-
-  const workingInterval = schedule?.modes?.working?.interval ?? '30m';
-  const offpeakInterval = schedule?.modes?.offpeak?.interval ?? '2h';
-  const overnightInterval = schedule?.modes?.overnight?.interval ?? '6h';
-
-  const mode = MODE_LABELS[currentMode];
-
-  const set = useCallback(async (key: string, value: unknown) => {
+  const loadSlots = useCallback(async () => {
+    if (gateway.connectionState !== 'connected') return;
     try {
-      await gateway.rpc('config.set', { key, value });
+      const result = await gateway.rpc('pulseSchedule.slots.list') as PulseSlot[];
+      setSlots(result);
     } catch (err) {
-      console.error(`failed to set ${key}:`, err);
+      console.error('failed to load slots:', err);
     }
-  }, [gateway]);
+  }, [gateway.connectionState, gateway.rpc]);
 
-  const fmtHour = (h: number) => {
-    const suffix = h >= 12 ? 'PM' : 'AM';
-    const display = h === 0 ? 12 : h > 12 ? h - 12 : h;
-    return `${display}:00 ${suffix}`;
+  const loadModes = useCallback(async () => {
+    if (gateway.connectionState !== 'connected') return;
+    try {
+      const result = await gateway.rpc('pulseSchedule.modes.list') as Record<string, any>;
+      setModes(result);
+    } catch (err) {
+      console.error('failed to load modes:', err);
+    }
+  }, [gateway.connectionState, gateway.rpc]);
+
+  useEffect(() => {
+    loadSlots();
+    loadModes();
+  }, [loadSlots, loadModes]);
+
+  const resetForm = () => {
+    setFormData({ mode: '', days: [], start: 9, end: 18 });
+    setEditingIndex(null);
+    setCreatingSlot(false);
   };
+
+  const addSlot = async () => {
+    try {
+      await gateway.rpc('pulseSchedule.slots.add', formData);
+      await loadSlots();
+      resetForm();
+    } catch (err) {
+      alert((err as Error).message || 'Failed to add slot');
+    }
+  };
+
+  const updateSlot = async (index: number) => {
+    try {
+      await gateway.rpc('pulseSchedule.slots.update', { index, ...formData });
+      await loadSlots();
+      resetForm();
+    } catch (err) {
+      alert((err as Error).message || 'Failed to update slot');
+    }
+  };
+
+  const deleteSlot = async (index: number) => {
+    if (!confirm('Delete this time block?')) return;
+    try {
+      await gateway.rpc('pulseSchedule.slots.delete', { index });
+      await loadSlots();
+    } catch (err) {
+      alert((err as Error).message || 'Failed to delete slot');
+    }
+  };
+
+  const startEdit = (index: number) => {
+    const slot = slots[index];
+    setFormData({
+      mode: slot.mode,
+      days: slot.days,
+      start: slot.start,
+      end: slot.end
+    });
+    setEditingIndex(index);
+    setCreatingSlot(false);
+  };
+
+  const startCreate = () => {
+    setFormData({ mode: Object.keys(modes)[0] || '', days: [1, 2, 3, 4, 5], start: 9, end: 18 });
+    setCreatingSlot(true);
+    setEditingIndex(null);
+  };
+
+  const formatDays = (days: number[]): string => {
+    if (days.length === 7) return 'every day';
+    if (days.length === 5 && days.every(d => d >= 1 && d <= 5)) return 'Mon-Fri';
+    if (days.length === 2 && days.includes(6) && days.includes(7)) return 'Sat-Sun';
+
+    const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return days.map(d => dayNames[d - 1]).join(', ');
+  };
+
+  const formatTimeRange = (start: number, end: number): string => {
+    const fmt = (h: number) => {
+      const suffix = h >= 12 ? 'pm' : 'am';
+      const display = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      return `${display}${suffix}`;
+    };
+
+    if (start === 0 && end === 24) return 'all day';
+    return `${fmt(start)}-${fmt(end)}`;
+  };
+
+  const toggleDay = (day: number) => {
+    setFormData(prev => ({
+      ...prev,
+      days: prev.days.includes(day)
+        ? prev.days.filter(d => d !== day)
+        : [...prev.days, day].sort((a, b) => a - b)
+    }));
+  };
+
+  const canSubmit = formData.mode && formData.days.length > 0;
 
   return (
     <div className="space-y-3 pt-2 border-t border-border">
       <div className="text-[10px] text-muted-foreground bg-muted/30 rounded px-2 py-1.5">
-        {mode.description}
+        Current: {MODE_LABELS[currentMode]?.label || currentMode}
       </div>
 
-      <div className="space-y-2">
-        <Label className="text-[10px] text-muted-foreground">timezone</Label>
-        <Select value={timezone} onValueChange={v => set('pulseSchedule.timezone', v)}>
-          <SelectTrigger className="h-7 text-[11px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {TIMEZONES.map(tz => (
-              <SelectItem key={tz} value={tz} className="text-[11px]">{tz}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      {(creatingSlot || editingIndex !== null) && (
+        <Card className="border-primary/50">
+          <CardContent className="p-3 space-y-2">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-semibold">{creatingSlot ? 'Add time block' : 'Edit time block'}</span>
+              <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={resetForm}>
+                <X className="w-3 h-3" />
+              </Button>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-[10px]">days</Label>
+              <div className="flex gap-1">
+                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, i) => (
+                  <Button
+                    key={day}
+                    variant={formData.days.includes(i + 1) ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-6 text-[10px] px-1 flex-1"
+                    onClick={() => toggleDay(i + 1)}
+                  >
+                    {day[0]}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-[10px]">time range</Label>
+              <div className="flex items-center gap-2">
+                <Select value={String(formData.start)} onValueChange={v => setFormData({ ...formData, start: parseInt(v) })}>
+                  <SelectTrigger className="h-7 text-[11px] flex-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {HOUR_OPTIONS.map(h => (
+                      <SelectItem key={h.value} value={h.value} className="text-[11px]">{h.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-[10px] text-muted-foreground">to</span>
+                <Select value={String(formData.end)} onValueChange={v => setFormData({ ...formData, end: parseInt(v) })}>
+                  <SelectTrigger className="h-7 text-[11px] flex-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {HOUR_OPTIONS.map(h => (
+                      <SelectItem key={h.value} value={h.value} className="text-[11px]">{h.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-[10px]">mode</Label>
+              <Select value={formData.mode} onValueChange={v => setFormData({ ...formData, mode: v })}>
+                <SelectTrigger className="h-7 text-[11px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(modes).map(([name, mode]: [string, any]) => (
+                    <SelectItem key={name} value={name} className="text-[11px]">
+                      {name} ({mode.interval} • {mode.priorityLevel || 'full'}{mode.description ? ` • ${mode.description}` : ''})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex gap-1.5 pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-6 text-[11px] px-2 flex-1"
+                onClick={resetForm}
+              >
+                cancel
+              </Button>
+              <Button
+                size="sm"
+                className="h-6 text-[11px] px-2 flex-1"
+                onClick={() => creatingSlot ? addSlot() : updateSlot(editingIndex!)}
+                disabled={!canSubmit}
+              >
+                {creatingSlot ? 'add' : 'save'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="space-y-1.5">
+        {slots.map((slot, i) => (
+          <div key={i} className="flex items-center gap-2 p-2 rounded border border-border bg-card hover:border-primary/30 transition-colors">
+            <div className="flex-1 min-w-0">
+              <div className="text-[11px] font-semibold truncate">
+                {formatDays(slot.days)} {formatTimeRange(slot.start, slot.end)}
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                {slot.mode}{modes[slot.mode] ? ` • ${modes[slot.mode].interval} • ${modes[slot.mode].priorityLevel}` : ''}
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 text-[10px] px-2"
+              onClick={() => startEdit(i)}
+            >
+              edit
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 text-[10px] px-2 text-destructive hover:text-destructive"
+              onClick={() => deleteSlot(i)}
+            >
+              delete
+            </Button>
+          </div>
+        ))}
       </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center gap-1.5">
-          <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
-          <Label className="text-[10px] font-medium">working hours</Label>
-        </div>
-        <div className="flex items-center gap-2">
-          <Select value={String(workingStart)} onValueChange={v => set('pulseSchedule.modes.working.hours', { start: parseInt(v), end: workingEnd })}>
-            <SelectTrigger className="h-7 text-[11px] flex-1">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {HOUR_OPTIONS.map(h => (
-                <SelectItem key={h.value} value={h.value} className="text-[11px]">{h.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <span className="text-[10px] text-muted-foreground">to</span>
-          <Select value={String(workingEnd)} onValueChange={v => set('pulseSchedule.modes.working.hours', { start: workingStart, end: parseInt(v) })}>
-            <SelectTrigger className="h-7 text-[11px] flex-1">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {HOUR_OPTIONS.map(h => (
-                <SelectItem key={h.value} value={h.value} className="text-[11px]">{h.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-2 pl-3.5">
-          <span className="text-[10px] text-muted-foreground">every</span>
-          <Select value={workingInterval} onValueChange={v => set('pulseSchedule.modes.working.interval', v)}>
-            <SelectTrigger className="h-7 text-[11px] w-20">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PULSE_INTERVALS.map(iv => (
-                <SelectItem key={iv} value={iv} className="text-[11px]">{iv}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <div className="flex items-center gap-1.5">
-          <span className="inline-block w-2 h-2 rounded-full bg-yellow-500" />
-          <Label className="text-[10px] font-medium">off-peak hours</Label>
-        </div>
-        <div className="flex items-center gap-2">
-          <Select value={String(offPeakStart)} onValueChange={v => set('pulseSchedule.modes.offpeak.hours', { start: parseInt(v), end: offPeakEnd })}>
-            <SelectTrigger className="h-7 text-[11px] flex-1">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {HOUR_OPTIONS.map(h => (
-                <SelectItem key={h.value} value={h.value} className="text-[11px]">{h.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <span className="text-[10px] text-muted-foreground">to</span>
-          <Select value={String(offPeakEnd)} onValueChange={v => set('pulseSchedule.modes.offpeak.hours', { start: offPeakStart, end: parseInt(v) })}>
-            <SelectTrigger className="h-7 text-[11px] flex-1">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {HOUR_OPTIONS.map(h => (
-                <SelectItem key={h.value} value={h.value} className="text-[11px]">{h.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-2 pl-3.5">
-          <span className="text-[10px] text-muted-foreground">every</span>
-          <Select value={offpeakInterval} onValueChange={v => set('pulseSchedule.modes.offpeak.interval', v)}>
-            <SelectTrigger className="h-7 text-[11px] w-20">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PULSE_INTERVALS.map(iv => (
-                <SelectItem key={iv} value={iv} className="text-[11px]">{iv}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <div className="flex items-center gap-1.5">
-          <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
-          <Label className="text-[10px] font-medium">overnight</Label>
-        </div>
-        <div className="text-[11px] text-muted-foreground pl-3.5">
-          {fmtHour(offPeakEnd)} to {fmtHour(workingStart)} (calculated)
-        </div>
-        <div className="flex items-center gap-2 pl-3.5">
-          <span className="text-[10px] text-muted-foreground">every</span>
-          <Select value={overnightInterval} onValueChange={v => set('pulseSchedule.modes.overnight.interval', v)}>
-            <SelectTrigger className="h-7 text-[11px] w-20">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PULSE_INTERVALS.map(iv => (
-                <SelectItem key={iv} value={iv} className="text-[11px]">{iv}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+      {!creatingSlot && editingIndex === null && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full h-7 text-[11px]"
+          onClick={startCreate}
+        >
+          <Plus className="w-3 h-3 mr-1" />
+          add time block
+        </Button>
+      )}
     </div>
   );
 }

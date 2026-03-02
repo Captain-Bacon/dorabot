@@ -147,7 +147,11 @@ export type RpcMethod =
   | 'pulseSchedule.modes.list'
   | 'pulseSchedule.modes.add'
   | 'pulseSchedule.modes.update'
-  | 'pulseSchedule.modes.delete';
+  | 'pulseSchedule.modes.delete'
+  | 'pulseSchedule.slots.list'
+  | 'pulseSchedule.slots.add'
+  | 'pulseSchedule.slots.update'
+  | 'pulseSchedule.slots.delete';
 
 export type GatewayEventName =
   | 'agent.stream'

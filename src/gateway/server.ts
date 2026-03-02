@@ -5583,6 +5583,105 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           return { id, result: { deleted: name } };
         }
 
+        case 'pulseSchedule.slots.list': {
+          return { id, result: config.pulseSchedule?.slots || [] };
+        }
+
+        case 'pulseSchedule.slots.add': {
+          const { mode, days, start, end } = params as {
+            mode?: string;
+            days?: number[];
+            start?: number;
+            end?: number;
+          };
+
+          if (!mode || !days || start === undefined || end === undefined) {
+            return { id, error: 'mode, days, start, and end are required' };
+          }
+          if (!config.pulseSchedule?.modes?.[mode]) {
+            return { id, error: `mode "${mode}" does not exist` };
+          }
+          if (!Array.isArray(days) || days.length === 0) {
+            return { id, error: 'days must be a non-empty array' };
+          }
+          if (start < 0 || start > 23 || end < 0 || end > 24) {
+            return { id, error: 'start and end must be between 0-23 and 0-24' };
+          }
+
+          const slot = { mode, days, start, end };
+          if (!config.pulseSchedule.slots) config.pulseSchedule.slots = [];
+          config.pulseSchedule.slots.push(slot);
+
+          saveConfig(config);
+          // Refresh autonomous schedule with new slots
+          if (scheduler && config.autonomy === 'autonomous') {
+            const tz = config.userTimezone || config.pulseSchedule.timezone || 'UTC';
+            const item = buildAutonomousCalendarItem(tz, undefined, config.pulseSchedule);
+            scheduler.updateItem(AUTONOMOUS_SCHEDULE_ID, { message: item.message, rrule: item.rrule });
+          }
+          broadcast({ event: 'config.update', data: { key: 'pulseSchedule', value: config.pulseSchedule } });
+          return { id, result: { slot } };
+        }
+
+        case 'pulseSchedule.slots.update': {
+          const { index, mode, days, start, end } = params as {
+            index?: number;
+            mode?: string;
+            days?: number[];
+            start?: number;
+            end?: number;
+          };
+
+          if (index === undefined || !config.pulseSchedule?.slots?.[index]) {
+            return { id, error: 'invalid slot index' };
+          }
+          if (mode && !config.pulseSchedule.modes?.[mode]) {
+            return { id, error: `mode "${mode}" does not exist` };
+          }
+          if (days && (!Array.isArray(days) || days.length === 0)) {
+            return { id, error: 'days must be a non-empty array' };
+          }
+          if (start !== undefined && (start < 0 || start > 23)) {
+            return { id, error: 'start must be between 0-23' };
+          }
+          if (end !== undefined && (end < 0 || end > 24)) {
+            return { id, error: 'end must be between 0-24' };
+          }
+
+          const slot = config.pulseSchedule.slots[index];
+          if (mode !== undefined) slot.mode = mode;
+          if (days !== undefined) slot.days = days;
+          if (start !== undefined) slot.start = start;
+          if (end !== undefined) slot.end = end;
+
+          saveConfig(config);
+          if (scheduler && config.autonomy === 'autonomous') {
+            const tz = config.userTimezone || config.pulseSchedule.timezone || 'UTC';
+            const item = buildAutonomousCalendarItem(tz, undefined, config.pulseSchedule);
+            scheduler.updateItem(AUTONOMOUS_SCHEDULE_ID, { message: item.message, rrule: item.rrule });
+          }
+          broadcast({ event: 'config.update', data: { key: 'pulseSchedule', value: config.pulseSchedule } });
+          return { id, result: { slot } };
+        }
+
+        case 'pulseSchedule.slots.delete': {
+          const { index } = params as { index?: number };
+
+          if (index === undefined || !config.pulseSchedule?.slots?.[index]) {
+            return { id, error: 'invalid slot index' };
+          }
+
+          config.pulseSchedule.slots.splice(index, 1);
+          saveConfig(config);
+          if (scheduler && config.autonomy === 'autonomous') {
+            const tz = config.userTimezone || config.pulseSchedule.timezone || 'UTC';
+            const item = buildAutonomousCalendarItem(tz, undefined, config.pulseSchedule);
+            scheduler.updateItem(AUTONOMOUS_SCHEDULE_ID, { message: item.message, rrule: item.rrule });
+          }
+          broadcast({ event: 'config.update', data: { key: 'pulseSchedule', value: config.pulseSchedule } });
+          return { id, result: { deleted: index } };
+        }
+
         case 'fs.list': {
           const dirPath = params?.path as string;
           if (!dirPath) return { id, error: 'path required' };
