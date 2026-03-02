@@ -553,6 +553,30 @@ export function startScheduler(opts: {
   let lastDetectedMode: string | null = null;
   let lastModeCheckTime = 0;
 
+  const regeneratePulseItem = (reason: string) => {
+    console.log(`[scheduler] ${reason}`);
+
+    const pulseItem = items.find(i => i.id === AUTONOMOUS_SCHEDULE_ID);
+    if (pulseItem) {
+      const newItem = buildAutonomousCalendarItem(
+        config.pulseSchedule?.timezone,
+        undefined,
+        config.pulseSchedule
+      );
+
+      Object.assign(pulseItem, {
+        summary: newItem.summary,
+        description: newItem.description,
+        rrule: newItem.rrule,
+        message: newItem.message,
+      });
+
+      const next = computeNextRun(pulseItem);
+      pulseItem.nextRunAt = next?.toISOString();
+      updateCalendarItemDb(pulseItem);
+    }
+  };
+
   const tick = () => {
     if (stopped) return;
     const now = Date.now();
@@ -562,32 +586,17 @@ export function startScheduler(opts: {
       // AUTONOMOUS_SCHEDULE_ID, detectCurrentPulseMode, buildAutonomousCalendarItem imported at top level
       const { mode } = detectCurrentPulseMode(config.pulseSchedule, config.pulseSchedule?.timezone);
 
-      if (lastDetectedMode && lastDetectedMode !== mode) {
-        console.log(`[scheduler] mode transition: ${lastDetectedMode} → ${mode}`);
-
-        // Regenerate autonomous pulse schedule
-        const pulseItem = items.find(i => i.id === AUTONOMOUS_SCHEDULE_ID);
-        if (pulseItem) {
-          const newItem = buildAutonomousCalendarItem(
-            config.pulseSchedule?.timezone,
-            undefined,
-            config.pulseSchedule
-          );
-
-          Object.assign(pulseItem, {
-            summary: newItem.summary,
-            description: newItem.description,
-            rrule: newItem.rrule,
-            message: newItem.message,
-          });
-
-          const next = computeNextRun(pulseItem);
-          pulseItem.nextRunAt = next?.toISOString();
-          updateCalendarItemDb(pulseItem);
-        }
+      if (!lastDetectedMode) {
+        // First detection after startup - regenerate to match current config
+        lastDetectedMode = mode;
+        regeneratePulseItem(`initial mode detected: ${mode}, regenerating pulse`);
+      } else if (lastDetectedMode !== mode) {
+        // Mode transition detected
+        const previousMode = lastDetectedMode;
+        lastDetectedMode = mode;
+        regeneratePulseItem(`mode transition: ${previousMode} → ${mode}`);
       }
 
-      lastDetectedMode = mode;
       lastModeCheckTime = now;
     }
 
