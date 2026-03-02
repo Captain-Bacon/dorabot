@@ -58,15 +58,17 @@ export type CalendarConfig = {
 };
 
 export type PulseModeConfig = {
-  hours?: { start: number; end: number };  // hour of day (0-23)
-  interval?: string;  // e.g. '30m', '2h', '6h'
   priorityLevel?: 'full' | 'reduced' | 'minimal';  // behavior priority level
   description?: string;  // optional description (max 100 chars)
   customPrompt?: string;  // custom priority template (overrides priorityLevel template)
+  // Legacy fields (for migration):
+  hours?: { start: number; end: number };  // deprecated: use slots instead
+  interval?: string;  // deprecated: use slots instead
 };
 
 export type PulseSlot = {
-  mode: string;  // reference to modes key
+  mode: string;  // reference to modes key (defines behavior)
+  interval: string;  // how often to pulse during this slot (e.g. '30m', '2h')
   days: number[];  // 1=Mon, 2=Tue, ..., 7=Sun
   start: number;  // hour 0-23
   end: number;  // hour 0-24

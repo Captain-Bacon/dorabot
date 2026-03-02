@@ -5593,15 +5593,16 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
         }
 
         case 'pulseSchedule.slots.add': {
-          const { mode, days, start, end } = params as {
+          const { mode, interval, days, start, end } = params as {
             mode?: string;
+            interval?: string;
             days?: number[];
             start?: number;
             end?: number;
           };
 
-          if (!mode || !days || start === undefined || end === undefined) {
-            return { id, error: 'mode, days, start, and end are required' };
+          if (!mode || !interval || !days || start === undefined || end === undefined) {
+            return { id, error: 'mode, interval, days, start, and end are required' };
           }
           if (!config.pulseSchedule?.modes?.[mode]) {
             return { id, error: `mode "${mode}" does not exist` };
@@ -5613,7 +5614,7 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
             return { id, error: 'start and end must be between 0-23 and 0-24' };
           }
 
-          const slot = { mode, days, start, end };
+          const slot = { mode, interval, days, start, end };
           if (!config.pulseSchedule.slots) config.pulseSchedule.slots = [];
           config.pulseSchedule.slots.push(slot);
 
@@ -5629,9 +5630,10 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
         }
 
         case 'pulseSchedule.slots.update': {
-          const { index, mode, days, start, end } = params as {
+          const { index, mode, interval, days, start, end } = params as {
             index?: number;
             mode?: string;
+            interval?: string;
             days?: number[];
             start?: number;
             end?: number;
@@ -5655,6 +5657,7 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
 
           const slot = config.pulseSchedule.slots[index];
           if (mode !== undefined) slot.mode = mode;
+          if (interval !== undefined) slot.interval = interval;
           if (days !== undefined) slot.days = days;
           if (start !== undefined) slot.start = start;
           if (end !== undefined) slot.end = end;

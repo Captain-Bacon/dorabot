@@ -49,7 +49,7 @@ export function detectCurrentPulseMode(scheduleConfig?: PulseScheduleConfig, tim
           return {
             mode: slot.mode,
             config: {
-              interval: modeConfig.interval || '30m',
+              interval: slot.interval || '30m',  // interval comes from slot, not mode
               priorityLevel: modeConfig.priorityLevel || 'full',
               description: modeConfig.description,
               customPrompt: modeConfig.customPrompt,
@@ -75,7 +75,7 @@ export function detectCurrentPulseMode(scheduleConfig?: PulseScheduleConfig, tim
     modeName = 'overnight';
   }
 
-  // Get mode config
+  // Get mode config (legacy: interval stored in mode config)
   const modeConfig = scheduleConfig?.modes?.[modeName];
   const defaultIntervals = { working: '30m', offpeak: '2h', overnight: '6h' };
   const defaultPriorities = { working: 'full', offpeak: 'reduced', overnight: 'minimal' };
@@ -83,7 +83,7 @@ export function detectCurrentPulseMode(scheduleConfig?: PulseScheduleConfig, tim
   return {
     mode: modeName,
     config: {
-      interval: modeConfig?.interval || defaultIntervals[modeName as keyof typeof defaultIntervals] || '30m',
+      interval: modeConfig?.interval || defaultIntervals[modeName as keyof typeof defaultIntervals] || '30m',  // legacy fallback
       priorityLevel: modeConfig?.priorityLevel || defaultPriorities[modeName as keyof typeof defaultPriorities] || 'full',
       description: modeConfig?.description,
       customPrompt: modeConfig?.customPrompt,

@@ -571,6 +571,7 @@ function PulseScheduleSettings({ gateway, currentMode }: { gateway: ReturnType<t
   const [creatingSlot, setCreatingSlot] = useState(false);
   const [formData, setFormData] = useState({
     mode: '',
+    interval: '30m',
     days: [] as number[],
     start: 9,
     end: 18
@@ -602,7 +603,7 @@ function PulseScheduleSettings({ gateway, currentMode }: { gateway: ReturnType<t
   }, [loadSlots, loadModes]);
 
   const resetForm = () => {
-    setFormData({ mode: '', days: [], start: 9, end: 18 });
+    setFormData({ mode: '', interval: '30m', days: [], start: 9, end: 18 });
     setEditingIndex(null);
     setCreatingSlot(false);
   };
@@ -641,6 +642,7 @@ function PulseScheduleSettings({ gateway, currentMode }: { gateway: ReturnType<t
     const slot = slots[index];
     setFormData({
       mode: slot.mode,
+      interval: slot.interval || '30m',
       days: slot.days,
       start: slot.start,
       end: slot.end
@@ -650,7 +652,7 @@ function PulseScheduleSettings({ gateway, currentMode }: { gateway: ReturnType<t
   };
 
   const startCreate = () => {
-    setFormData({ mode: Object.keys(modes)[0] || '', days: [1, 2, 3, 4, 5], start: 9, end: 18 });
+    setFormData({ mode: Object.keys(modes)[0] || '', interval: '30m', days: [1, 2, 3, 4, 5], start: 9, end: 18 });
     setCreatingSlot(true);
     setEditingIndex(null);
   };
@@ -747,7 +749,21 @@ function PulseScheduleSettings({ gateway, currentMode }: { gateway: ReturnType<t
             </div>
 
             <div className="space-y-1">
-              <Label className="text-[10px]">mode</Label>
+              <Label className="text-[10px]">pulse interval</Label>
+              <Select value={formData.interval} onValueChange={v => setFormData({ ...formData, interval: v })}>
+                <SelectTrigger className="h-7 text-[11px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PULSE_INTERVALS.map(iv => (
+                    <SelectItem key={iv} value={iv} className="text-[11px]">{iv}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-[10px]">behavior mode</Label>
               <Select value={formData.mode} onValueChange={v => setFormData({ ...formData, mode: v })}>
                 <SelectTrigger className="h-7 text-[11px]">
                   <SelectValue />
@@ -755,7 +771,7 @@ function PulseScheduleSettings({ gateway, currentMode }: { gateway: ReturnType<t
                 <SelectContent>
                   {Object.entries(modes).map(([name, mode]: [string, any]) => (
                     <SelectItem key={name} value={name} className="text-[11px]">
-                      {name} ({mode.interval} • {mode.priorityLevel || 'full'}{mode.description ? ` • ${mode.description}` : ''})
+                      {name} • {mode.priorityLevel || 'full'}{mode.description ? ` • ${mode.description}` : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -792,7 +808,7 @@ function PulseScheduleSettings({ gateway, currentMode }: { gateway: ReturnType<t
                 {formatDays(slot.days)} {formatTimeRange(slot.start, slot.end)}
               </div>
               <div className="text-[10px] text-muted-foreground">
-                {slot.mode}{modes[slot.mode] ? ` • ${modes[slot.mode].interval} • ${modes[slot.mode].priorityLevel}` : ''}
+                {slot.interval || '30m'} • {slot.mode}{modes[slot.mode] ? ` • ${modes[slot.mode].priorityLevel}` : ''}
               </div>
             </div>
             <Button
@@ -831,12 +847,12 @@ function PulseScheduleSettings({ gateway, currentMode }: { gateway: ReturnType<t
 }
 
 function PulseModeSettings({ gateway }: { gateway: ReturnType<typeof useGateway> }) {
-  const [modes, setModes] = useState<Record<string, { interval?: string; priorityLevel?: string; description?: string; hours?: { start: number; end: number }; customPrompt?: string }>>({});
+  const [modes, setModes] = useState<Record<string, { priorityLevel?: string; description?: string; customPrompt?: string }>>({});
   const [editingMode, setEditingMode] = useState<string | null>(null);
   const [creatingMode, setCreatingMode] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState<string | null>(null);
   const [templates, setTemplates] = useState<Record<string, string>>({});
-  const [formData, setFormData] = useState({ name: '', interval: '30m', priorityLevel: 'full', description: '', customPrompt: '' });
+  const [formData, setFormData] = useState({ name: '', priorityLevel: 'full', description: '', customPrompt: '' });
 
   const loadModes = useCallback(async () => {
     if (gateway.connectionState !== 'connected') return;
@@ -864,7 +880,7 @@ function PulseModeSettings({ gateway }: { gateway: ReturnType<typeof useGateway>
   }, [loadModes, loadTemplates]);
 
   const resetForm = () => {
-    setFormData({ name: '', interval: '30m', priorityLevel: 'full', description: '', customPrompt: '' });
+    setFormData({ name: '', priorityLevel: 'full', description: '', customPrompt: '' });
     setEditingMode(null);
     setCreatingMode(false);
     setEditingPrompt(null);
@@ -904,7 +920,6 @@ function PulseModeSettings({ gateway }: { gateway: ReturnType<typeof useGateway>
     const mode = modes[name];
     setFormData({
       name,
-      interval: mode.interval || '30m',
       priorityLevel: mode.priorityLevel || 'full',
       description: mode.description || '',
       customPrompt: mode.customPrompt || '',
@@ -914,7 +929,7 @@ function PulseModeSettings({ gateway }: { gateway: ReturnType<typeof useGateway>
   };
 
   const startCreate = () => {
-    setFormData({ name: '', interval: '30m', priorityLevel: 'full', description: '', customPrompt: '' });
+    setFormData({ name: '', priorityLevel: 'full', description: '', customPrompt: '' });
     setCreatingMode(true);
     setEditingMode(null);
   };
@@ -923,7 +938,6 @@ function PulseModeSettings({ gateway }: { gateway: ReturnType<typeof useGateway>
     const mode = modes[modeName];
     setFormData({
       name: modeName,
-      interval: mode.interval || '30m',
       priorityLevel: mode.priorityLevel || 'full',
       description: mode.description || '',
       customPrompt: mode.customPrompt || '',
@@ -943,12 +957,12 @@ function PulseModeSettings({ gateway }: { gateway: ReturnType<typeof useGateway>
     return '🔵';
   };
 
-  const canSubmit = creatingMode ? formData.name && formData.interval && formData.priorityLevel : formData.interval && formData.priorityLevel;
+  const canSubmit = creatingMode ? formData.name && formData.priorityLevel : formData.priorityLevel;
 
   return (
     <div className="space-y-3 pt-2 border-t border-border">
       <div className="text-[10px] text-muted-foreground bg-muted/30 rounded px-2 py-1.5">
-        Manage pulse modes. Assign different intervals and priority levels for different contexts.
+        Manage pulse modes. Each mode defines behavior (priority level, custom prompts). Assign modes to time slots in the schedule tab.
       </div>
 
       {(creatingMode || editingMode) && (
@@ -973,20 +987,6 @@ function PulseModeSettings({ gateway }: { gateway: ReturnType<typeof useGateway>
                 <span className="text-[9px] text-muted-foreground">alphanumeric + hyphens, max 20 chars</span>
               </div>
             )}
-
-            <div className="space-y-1">
-              <Label className="text-[10px]">interval</Label>
-              <Select value={formData.interval} onValueChange={v => setFormData({ ...formData, interval: v })}>
-                <SelectTrigger className="h-7 text-[11px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PULSE_INTERVALS.map(iv => (
-                    <SelectItem key={iv} value={iv} className="text-[11px]">{iv}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
 
             <div className="space-y-1">
               <Label className="text-[10px]">priority level</Label>
@@ -1124,7 +1124,7 @@ function PulseModeSettings({ gateway }: { gateway: ReturnType<typeof useGateway>
                   {mode.customPrompt && <Badge variant="outline" className="text-[8px] h-3 px-1 ml-1.5">custom</Badge>}
                 </div>
                 <div className="text-[10px] text-muted-foreground">
-                  {mode.interval} • {mode.priorityLevel || 'full'}{mode.description ? ` • ${mode.description}` : ''}
+                  {mode.priorityLevel || 'full'}{mode.description ? ` • ${mode.description}` : ''}
                 </div>
               </div>
               <Button
