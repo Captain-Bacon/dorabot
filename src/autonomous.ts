@@ -99,26 +99,30 @@ export function detectCurrentPulseMode(scheduleConfig?: PulseScheduleConfig, tim
 const PRIORITY_TEMPLATE_FULL = `## Priority (strict order)
 
 1. **Advance running tasks.** Execute the next concrete step. Use the browser, run commands, write code, whatever it takes. Keep tasks_update current.
-2. **Verify checking tasks (three-agent pipeline).** For tasks in checking status:
+2. **Verify checking tasks (sequential pulse verification).** For tasks in checking status, do ONE verification step per pulse:
 
-   **Agent B (Code Verifier)**: Spawn a Haiku sub-agent for functional verification. Give it: task result, handoffSummary, files claimed to be changed. Ask it to check:
-   - Do the files exist and were they actually modified?
-   - Does the code compile/build?
-   - Do tests pass (if applicable)?
-   - Are the claimed outputs present?
-   Return PASS/FAIL with evidence. Agent B does NOT assess plan compliance or goal fit.
+   First, read the task's logs (tasks_view with includeLogs: true) to see what verification has been done:
 
-   **Agent C (Fit Verifier)**: If Agent B passes, spawn a DIFFERENT Haiku sub-agent for fit verification. Give it: task plan, task result, goal description. Ask it to check:
-   - Does the delivery match what the plan promised?
-   - Does this move the goal forward?
-   - For audit/research/exploration tasks: were follow-up tasks created for recommendations?
-   Return PASS/FAIL with specifics. Agent C does NOT re-check functional correctness.
+   **If no "code_verified" or "code_verified_fail" log entry exists**, do code verification:
+   - Read the task result and handoffSummary
+   - Check: Do claimed files exist? Does the code compile/build? Do tests pass? Are claimed outputs present?
+   - Log your findings: tasks_update with reason field containing "CODE_VERIFY: PASS - [evidence]" or "CODE_VERIFY: FAIL - [evidence]"
+   - Do NOT assess plan compliance or goal fit in this step
+   - Stop here. The next pulse will do fit verification.
 
-   **Final decision**: If both pass, check verificationType:
-   - agent-verified: mark task done
+   **If code verification passed but no "fit_verified" or "fit_verified_fail" log entry exists**, do fit verification:
+   - Read the task plan, result, and goal description
+   - Check: Does delivery match the plan? Does this move the goal forward? For audit/research/exploration tasks, were follow-up tasks created?
+   - Log your findings: tasks_update with reason field containing "FIT_VERIFY: PASS - [evidence]" or "FIT_VERIFY: FAIL - [evidence]"
+   - Stop here. Apply the final decision below.
+
+   **If code verification failed**, move the task back to approved with the failure reason. A fresh agent picks up the fix.
+
+   **Final decision (after both verifications pass):**
+   - agent-verified: mark task done via tasks_update(status: "done")
    - human-verified: add verification summary to task.reason, leave in checking for human
 
-   If either fails: move task back to approved with failure reason. A fresh agent will pick up the fix.
+   Only verify ONE task per pulse. Each pulse is independent with no shared session state.
 
 3. **Verify checking goals.** Check goals_view(status: "checking") for goals. Read goal description and all completed task results. Assess if intent is met. If clearly met, move to done. If uncertain, add summary to goal.reason and leave in checking.
 4. **Act on monitored things.** Check prices, deployments, PRs, tracking pages. Live browser checks, not assumptions. If state changed, act or notify.
@@ -137,7 +141,7 @@ Do at least one meaningful action every pulse. Do not end without a concrete nex
 const PRIORITY_TEMPLATE_REDUCED = `## Priority (strict order)
 
 1. **Advance running tasks.** Execute the next concrete step. Keep tasks_update current.
-2. **Verify checking tasks (three-agent pipeline).** Spawn Agent B (Haiku) for code checks, then Agent C (Haiku) for fit checks. If both pass and verificationType is agent: mark done. If human: add summary and leave in checking. If either fails: move to approved with reason.
+2. **Verify checking tasks.** For tasks in checking status, do ONE verification step per pulse. Check task logs to see what's been done: if no code verification, do that. If code passed but no fit verification, do that. If both passed, apply final decision (agent-verified: mark done, human-verified: leave for human). If either failed, move to approved with reason.
 3. **Verify checking goals.** Assess if intent is met. Move to done or leave with summary.
 4. **Act on monitored things.** Check critical items (deployments, breaking changes). Live browser checks if needed.
 5. **Follow up with the owner.** If you asked something and they answered (check journal), incorporate it.

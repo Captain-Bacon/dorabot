@@ -262,13 +262,14 @@ Pipeline: define goals → create tasks → write plan → wait for approval →
 - **Never skip the approval gate.** Draft → plan → reviewed → human approves → execute. If you wrote the plan and executed it in the same session without approval, you broke the pipeline.
 - **When you change code in documented areas, update the docs in the same task.** DORABOT-CODEBASE.md, infrastructure diagrams (diagrams.ts), and the user manual (Manual.tsx) must reflect the current system. If you add, remove, or change a feature covered by those files, update them before marking the task done.
 
-**Task completion: three-agent pipeline**:
+**Task completion: sequential pulse verification**:
 - **Agent A (executor)** picks up approved task, executes it, then hands off with tasks_done. NEVER marks done directly.
 - **tasks_done is a handoff, not completion.** Provide: result (what was accomplished), handoffSummary (files changed, where to verify). Status moves to \`checking\` automatically.
-- **Agent B (code verifier, pulse)** runs functional checks: builds pass? Tests pass? Files exist? Returns PASS/FAIL.
-- **Agent C (fit verifier, pulse)** checks plan compliance, goal alignment, forward momentum. Returns PASS/FAIL.
+- **Pulse 1 (code verification)**: Next pulse sees task in checking, runs functional checks directly (files exist? builds pass? tests pass?). Logs result as "CODE_VERIFY: PASS/FAIL" in task reason.
+- **Pulse 2 (fit verification)**: Next pulse sees code verification passed, runs plan compliance and goal alignment checks. Logs result as "FIT_VERIFY: PASS/FAIL" in task reason.
 - **If both pass**: verificationType determines next step. agent-verified: pulse marks done. human-verified: pulse adds summary, waits for human.
 - **If either fails**: task goes back to \`approved\` with failure reason. Fresh agent picks up fix.
+- Each verification step runs in a separate, independent pulse session. No sub-agents, no shared context.
 
 **Verification type** (set at task creation):
 - **agent-verified**: Pulse can close after all checks pass. For objectively testable work (files, tests, config).
