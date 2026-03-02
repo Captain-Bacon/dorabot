@@ -549,9 +549,46 @@ export function startScheduler(opts: {
     }
   };
 
+  let lastDetectedMode: string | null = null;
+  let lastModeCheckTime = 0;
+
   const tick = () => {
     if (stopped) return;
     const now = Date.now();
+
+    // Check for mode transitions every hour
+    if (config.autonomy === 'autonomous' && config.pulseSchedule && now - lastModeCheckTime >= 3600000) {
+      const { AUTONOMOUS_SCHEDULE_ID, detectCurrentPulseMode, buildAutonomousCalendarItem } = require('../autonomous.js');
+      const { mode } = detectCurrentPulseMode(config.pulseSchedule, config.pulseSchedule?.timezone);
+
+      if (lastDetectedMode && lastDetectedMode !== mode) {
+        console.log(`[scheduler] mode transition: ${lastDetectedMode} → ${mode}`);
+
+        // Regenerate autonomous pulse schedule
+        const pulseItem = items.find(i => i.id === AUTONOMOUS_SCHEDULE_ID);
+        if (pulseItem) {
+          const newItem = buildAutonomousCalendarItem(
+            config.pulseSchedule?.timezone,
+            undefined,
+            config.pulseSchedule
+          );
+
+          Object.assign(pulseItem, {
+            summary: newItem.summary,
+            description: newItem.description,
+            rrule: newItem.rrule,
+            message: newItem.message,
+          });
+
+          const next = computeNextRun(pulseItem);
+          pulseItem.nextRunAt = next?.toISOString();
+          updateCalendarItemDb(pulseItem);
+        }
+      }
+
+      lastDetectedMode = mode;
+      lastModeCheckTime = now;
+    }
 
     for (const item of items) {
       if (item.enabled === false) continue;

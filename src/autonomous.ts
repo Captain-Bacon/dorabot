@@ -28,48 +28,68 @@ export function rruleToPulseInterval(rrule: string): string {
   return '30m';
 }
 
+// Legacy function for backward compatibility
 export function detectPulseMode(scheduleConfig?: PulseScheduleConfig, timezone?: string): PulseMode {
+  const { mode } = detectCurrentPulseMode(scheduleConfig, timezone);
+  return mode as PulseMode;
+}
+
+export function detectCurrentPulseMode(scheduleConfig?: PulseScheduleConfig, timezone?: string): { mode: string; config: { interval: string; priorityLevel: string; description?: string } } {
   const tz = timezone || scheduleConfig?.timezone || 'UTC';
   const now = DateTime.now().setZone(tz);
   const hour = now.hour;
+  const day = now.weekday; // 1=Mon, 7=Sun
 
-  // Use new schema if available, fall back to legacy
+  // If slots are defined, use slot-based detection
+  if (scheduleConfig?.slots && scheduleConfig.slots.length > 0) {
+    for (const slot of scheduleConfig.slots) {
+      if (slot.days.includes(day) && hour >= slot.start && hour < slot.end) {
+        const modeConfig = scheduleConfig.modes?.[slot.mode];
+        if (modeConfig) {
+          return {
+            mode: slot.mode,
+            config: {
+              interval: modeConfig.interval || '30m',
+              priorityLevel: modeConfig.priorityLevel || 'full',
+              description: modeConfig.description,
+            },
+          };
+        }
+      }
+    }
+  }
+
+  // Fall back to legacy hour-based detection
   const workingStart = scheduleConfig?.modes?.working?.hours?.start ?? scheduleConfig?.workingHours?.start ?? 9;
   const workingEnd = scheduleConfig?.modes?.working?.hours?.end ?? scheduleConfig?.workingHours?.end ?? 18;
   const offPeakStart = scheduleConfig?.modes?.offpeak?.hours?.start ?? scheduleConfig?.offPeakHours?.start ?? 18;
   const offPeakEnd = scheduleConfig?.modes?.offpeak?.hours?.end ?? scheduleConfig?.offPeakHours?.end ?? 23;
 
-  // Working hours (default 9am-6pm)
+  let modeName: string;
   if (hour >= workingStart && hour < workingEnd) {
-    return 'working';
+    modeName = 'working';
+  } else if (hour >= offPeakStart && hour < offPeakEnd) {
+    modeName = 'offpeak';
+  } else {
+    modeName = 'overnight';
   }
 
-  // Off-peak (default 6pm-11pm)
-  if (hour >= offPeakStart && hour < offPeakEnd) {
-    return 'offpeak';
-  }
+  // Get mode config
+  const modeConfig = scheduleConfig?.modes?.[modeName];
+  const defaultIntervals = { working: '30m', offpeak: '2h', overnight: '6h' };
+  const defaultPriorities = { working: 'full', offpeak: 'reduced', overnight: 'minimal' };
 
-  // Overnight (default 11pm-9am)
-  return 'overnight';
+  return {
+    mode: modeName,
+    config: {
+      interval: modeConfig?.interval || defaultIntervals[modeName as keyof typeof defaultIntervals] || '30m',
+      priorityLevel: modeConfig?.priorityLevel || defaultPriorities[modeName as keyof typeof defaultPriorities] || 'full',
+      description: modeConfig?.description,
+    },
+  };
 }
 
-export function buildAutonomousPrompt(timezone?: string, scheduleConfig?: PulseScheduleConfig): string {
-  const todayDir = getTodayMemoryDir(timezone);
-  const mode = detectPulseMode(scheduleConfig, timezone);
-
-  const baseBootstrap = `Autonomous pulse (${mode} mode). Fresh session. Memory files are your only continuity.
-
-## Bootstrap
-
-1. Read ${todayDir}/MEMORY.md if it exists (what you've already done today).
-2. Check goals and tasks (goals_view, tasks_view).
-3. If creating research output, check ${RESEARCH_SKILL_PATH} first.`;
-
-  let priorities: string;
-
-  if (mode === 'working') {
-    // Full engagement: all 10 priorities
-    priorities = `## Priority (strict order)
+const PRIORITY_TEMPLATE_FULL = `## Priority (strict order)
 
 1. **Advance in_progress tasks.** Execute the next concrete step. Use the browser, run commands, write code, whatever it takes. Keep tasks_update current.
 2. **Verify checking items.** Check goals_view(status: "checking") and tasks_view(filter: "active") for items in checking status. For each: read the goal description and completed task results. Assess whether the goal's intent is met. If clearly met, move goal to done. If unclear or partially met, write a summary to goal.reason explaining what's done and what might be missing, then leave in checking for the user to decide. You didn't write this work, so read it with fresh eyes.
@@ -86,9 +106,8 @@ export function buildAutonomousPrompt(timezone?: string, scheduleConfig?: PulseS
 12. **Spot gaps and opportunities.** You have a third-party perspective the owner doesn't. If you notice something that would improve the dorabot ecosystem (UI polish, missing functionality, backend improvements, UX friction, useful integrations, or anything else), raise it. Create a goal in developing mode, send a message explaining what you spotted and why it matters. The owner gets blinkered. You see fresh each pulse. Use that.
 
 Do at least one meaningful action every pulse. Do not end without a concrete next action.`;
-  } else if (mode === 'offpeak') {
-    // Reduced engagement: focus on tasks and critical monitoring
-    priorities = `## Priority (strict order)
+
+const PRIORITY_TEMPLATE_REDUCED = `## Priority (strict order)
 
 1. **Advance in_progress tasks.** Execute the next concrete step. Keep tasks_update current.
 2. **Verify checking items.** Check goals in checking status. Assess whether intent is met based on completed task results. Move to done or leave with summary for user. For validation-blocked tasks (reason mentions "Plan-vs-delivery mismatch" or "follow-up tasks"), delegate to a Haiku sub-agent: brief it with plan, result, files changed, ask for PASS/FAIL verdict. Spot-check complex or borderline cases yourself.
@@ -98,15 +117,41 @@ Do at least one meaningful action every pulse. Do not end without a concrete nex
 6. **Research or prepare.** If a task needs info, gather it. Store via research_add/research_update.
 
 Off-peak mode: focus on advancing existing work. Avoid new proposals unless genuinely urgent.`;
-  } else {
-    // Overnight: minimal monitoring only
-    priorities = `## Priority (strict order)
+
+const PRIORITY_TEMPLATE_MINIMAL = `## Priority (strict order)
 
 1. **Advance approved tasks.** If tasks are approved and ready (tasks_view filter: 'approved'), execute them.
 2. **Monitor critical items.** Check for failures, breaking changes, or urgent issues that can't wait.
 3. **Handle emergencies.** Respond to critical blockers or urgent owner messages only.
 
 Overnight mode: minimal activity. Most work waits for working hours. No engagement, no proposals, no new goals.`;
+
+export function buildAutonomousPrompt(timezone?: string, scheduleConfig?: PulseScheduleConfig): string {
+  const todayDir = getTodayMemoryDir(timezone);
+  const { mode, config: modeConfig } = detectCurrentPulseMode(scheduleConfig, timezone);
+
+  const baseBootstrap = `Autonomous pulse (${mode} mode). Fresh session. Memory files are your only continuity.
+
+## Bootstrap
+
+1. Read ${todayDir}/MEMORY.md if it exists (what you've already done today).
+2. Check goals and tasks (goals_view, tasks_view).
+3. If creating research output, check ${RESEARCH_SKILL_PATH} first.`;
+
+  let priorities: string;
+
+  switch (modeConfig.priorityLevel) {
+    case 'full':
+      priorities = PRIORITY_TEMPLATE_FULL;
+      break;
+    case 'reduced':
+      priorities = PRIORITY_TEMPLATE_REDUCED;
+      break;
+    case 'minimal':
+      priorities = PRIORITY_TEMPLATE_MINIMAL;
+      break;
+    default:
+      priorities = PRIORITY_TEMPLATE_FULL;
   }
 
   const afterActing = `
@@ -119,12 +164,12 @@ Overnight mode: minimal activity. Most work waits for working hours. No engageme
 - Created/updated goals, tasks, or research → message the owner (what changed, why, suggested next action).
 - Urgent → message them.`;
 
-  const boundaries = mode === 'overnight'
+  const boundaries = modeConfig.priorityLevel === 'minimal'
     ? `
 
 ## Boundaries
 
-Overnight mode: most things can wait. "Nothing to act on" is normal and expected. Only act on genuine emergencies or approved tasks.`
+${mode} mode: most things can wait. "Nothing to act on" is normal and expected. Only act on genuine emergencies or approved tasks.`
     : `
 
 ## Boundaries
@@ -135,18 +180,15 @@ Stay focused. Before declaring "nothing to act on", verify: goals checked, tasks
 }
 
 export function buildAutonomousCalendarItem(timezone?: string, interval?: string, scheduleConfig?: PulseScheduleConfig) {
-  // If no explicit interval provided, derive from current mode
-  let effectiveInterval = interval;
-  if (!effectiveInterval) {
-    const mode = detectPulseMode(scheduleConfig, timezone);
-    effectiveInterval = scheduleConfig?.modes?.[mode]?.interval ||
-                       (mode === 'working' ? '30m' : mode === 'offpeak' ? '2h' : '6h');
-  }
+  const { mode, config: modeConfig } = detectCurrentPulseMode(scheduleConfig, timezone);
+
+  // If no explicit interval provided, use current mode's interval
+  const effectiveInterval = interval || modeConfig.interval;
 
   return {
     type: 'event' as const,
-    summary: 'Autonomy pulse',
-    description: 'Periodic autonomy pulse',
+    summary: `Autonomy pulse (${mode})`,
+    description: modeConfig.description || 'Periodic autonomy pulse',
     dtstart: new Date().toISOString(),
     rrule: pulseIntervalToRrule(effectiveInterval),
     timezone,

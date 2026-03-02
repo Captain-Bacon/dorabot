@@ -337,27 +337,24 @@ export function Automations({ gateway }: AutomationsProps) {
 
               {pulse.enabled && (
                 <>
-                  <div className="flex items-center gap-3">
-                    <Label className="text-[11px] text-muted-foreground w-16">every</Label>
-                    <Select value={pulse.interval} onValueChange={setPulseInterval}>
-                      <SelectTrigger className="h-7 text-[11px] w-24">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PULSE_INTERVALS.map(iv => (
-                          <SelectItem key={iv} value={iv} className="text-[11px]">{iv}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-[11px] px-2 ml-auto"
-                      onClick={runPulseNow}
-                      disabled={pulseRunning}
-                    >
-                      <Play className="w-3 h-3 mr-1" />run now
-                    </Button>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Badge className={`text-[9px] h-4 px-1.5 border-0 ${MODE_LABELS[currentMode].color}`}>
+                        {MODE_LABELS[currentMode].label}
+                      </Badge>
+                      <span className="text-[10px] text-muted-foreground">
+                        {pulse.interval} • {MODE_LABELS[currentMode].description}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-6 text-[10px] px-2 ml-auto"
+                        onClick={runPulseNow}
+                        disabled={pulseRunning}
+                      >
+                        <Play className="w-3 h-3 mr-1" />run now
+                      </Button>
+                    </div>
                   </div>
 
                   <div className="flex items-center justify-between">
@@ -389,9 +386,6 @@ export function Automations({ gateway }: AutomationsProps) {
                       >
                         <Timer className="w-3 h-3" />
                         {showPulseSchedule ? 'hide' : 'schedule'}
-                        <Badge className={`text-[8px] h-3.5 px-1 border-0 ${MODE_LABELS[currentMode].color}`}>
-                          {MODE_LABELS[currentMode].label}
-                        </Badge>
                       </Button>
                     </div>
                   </div>
