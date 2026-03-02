@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { tool } from '@anthropic-ai/claude-agent-sdk';
@@ -458,6 +458,11 @@ export const tasksDeleteTool = tool(
       return { content: [{ type: 'text', text: `Task #${args.id} not found` }], isError: true };
     }
     saveTasks(state);
+    // Clean up plan files to prevent contamination if task ID is reused
+    const planDir = join(TASK_PLAN_ROOT_DIR, args.id);
+    if (existsSync(planDir)) {
+      rmSync(planDir, { recursive: true });
+    }
     appendTaskLog(args.id, 'task_delete', `Task #${args.id} deleted`);
     return { content: [{ type: 'text', text: `Task #${args.id} deleted` }] };
   },
