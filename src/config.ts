@@ -60,15 +60,18 @@ export type CalendarConfig = {
 export type PulseModeConfig = {
   hours?: { start: number; end: number };  // hour of day (0-23)
   interval?: string;  // e.g. '30m', '2h', '6h'
+  priorityLevel?: 'full' | 'reduced' | 'minimal';  // behavior priority level
+  description?: string;  // optional description (max 100 chars)
 };
 
 export type PulseScheduleConfig = {
   timezone?: string;
-  modes?: {
-    working?: PulseModeConfig;
-    offpeak?: PulseModeConfig;
-    overnight?: PulseModeConfig;
-  };
+  modes?: Record<string, PulseModeConfig>;  // dynamic mode dictionary
+  slots?: Array<{  // schedule slots (Phase 3)
+    days?: number[];  // 0=Sun, 1=Mon, etc
+    hours?: { start: number; end: number };
+    mode: string;  // reference to modes key
+  }>;
   // Legacy fields (for migration):
   workingHours?: { start: number; end: number };
   offPeakHours?: { start: number; end: number };
@@ -251,14 +254,20 @@ function migratePulseScheduleConfig(schedule: PulseScheduleConfig | undefined): 
     modes: {
       working: {
         hours: schedule.workingHours || { start: 9, end: 18 },
-        interval: '30m',  // default for working mode
+        interval: '30m',
+        priorityLevel: 'full',
+        description: 'Focus time',
       },
       offpeak: {
         hours: schedule.offPeakHours || { start: 18, end: 23 },
-        interval: '2h',  // default for off-peak mode
+        interval: '2h',
+        priorityLevel: 'reduced',
+        description: 'Maintenance',
       },
       overnight: {
-        interval: '6h',  // default for overnight mode
+        interval: '6h',
+        priorityLevel: 'minimal',
+        description: 'Sleep mode',
       },
     },
   };

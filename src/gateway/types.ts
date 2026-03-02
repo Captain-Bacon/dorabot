@@ -143,7 +143,11 @@ export type RpcMethod =
   | 'libraries.add'
   | 'libraries.remove'
   | 'libraries.search'
-  | 'libraries.reindex';
+  | 'libraries.reindex'
+  | 'pulseSchedule.modes.list'
+  | 'pulseSchedule.modes.add'
+  | 'pulseSchedule.modes.update'
+  | 'pulseSchedule.modes.delete';
 
 export type GatewayEventName =
   | 'agent.stream'

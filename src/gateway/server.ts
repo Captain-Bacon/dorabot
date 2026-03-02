@@ -5445,6 +5445,144 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           return { id, error: `unsupported config key: ${key}` };
         }
 
+        case 'pulseSchedule.modes.list': {
+          const modes = config.pulseSchedule?.modes || {};
+          return { id, result: modes };
+        }
+
+        case 'pulseSchedule.modes.add': {
+          const { name, interval, priorityLevel, description } = params as {
+            name?: string;
+            interval?: string;
+            priorityLevel?: string;
+            description?: string;
+          };
+
+          // Validation
+          if (!name || !interval || !priorityLevel) {
+            return { id, error: 'name, interval, and priorityLevel are required' };
+          }
+          if (!/^[a-zA-Z0-9-]+$/.test(name) || name.length > 20) {
+            return { id, error: 'name must be alphanumeric + hyphens, max 20 chars' };
+          }
+          if (!PULSE_INTERVALS.includes(interval)) {
+            return { id, error: `interval must be one of: ${PULSE_INTERVALS.join(', ')}` };
+          }
+          if (!['full', 'reduced', 'minimal'].includes(priorityLevel)) {
+            return { id, error: 'priorityLevel must be full, reduced, or minimal' };
+          }
+          if (description && description.length > 100) {
+            return { id, error: 'description max 100 chars' };
+          }
+
+          // Ensure config structure exists
+          if (!config.pulseSchedule) config.pulseSchedule = {};
+          if (!config.pulseSchedule.modes) config.pulseSchedule.modes = {};
+
+          // Check if mode already exists
+          if (config.pulseSchedule.modes[name]) {
+            return { id, error: `mode "${name}" already exists` };
+          }
+
+          // Create mode
+          config.pulseSchedule.modes[name] = {
+            interval,
+            priorityLevel: priorityLevel as 'full' | 'reduced' | 'minimal',
+            description: description || undefined,
+          };
+
+          saveConfig(config);
+          broadcast({ event: 'config.update', data: { key: 'pulseSchedule.modes', value: config.pulseSchedule.modes } });
+          return { id, result: { name } };
+        }
+
+        case 'pulseSchedule.modes.update': {
+          const { oldName, name, interval, priorityLevel, description } = params as {
+            oldName?: string;
+            name?: string;
+            interval?: string;
+            priorityLevel?: string;
+            description?: string;
+          };
+
+          if (!oldName) {
+            return { id, error: 'oldName is required' };
+          }
+          if (!config.pulseSchedule?.modes?.[oldName]) {
+            return { id, error: `mode "${oldName}" not found` };
+          }
+
+          // Validate new values if provided
+          if (name !== undefined) {
+            if (!/^[a-zA-Z0-9-]+$/.test(name) || name.length > 20) {
+              return { id, error: 'name must be alphanumeric + hyphens, max 20 chars' };
+            }
+            if (name !== oldName && config.pulseSchedule.modes[name]) {
+              return { id, error: `mode "${name}" already exists` };
+            }
+          }
+          if (interval !== undefined && !PULSE_INTERVALS.includes(interval)) {
+            return { id, error: `interval must be one of: ${PULSE_INTERVALS.join(', ')}` };
+          }
+          if (priorityLevel !== undefined && !['full', 'reduced', 'minimal'].includes(priorityLevel)) {
+            return { id, error: 'priorityLevel must be full, reduced, or minimal' };
+          }
+          if (description !== undefined && description.length > 100) {
+            return { id, error: 'description max 100 chars' };
+          }
+
+          const currentMode = config.pulseSchedule.modes[oldName];
+          const targetName = name || oldName;
+
+          // If renaming, update all slot references
+          if (name && name !== oldName) {
+            if (config.pulseSchedule.slots) {
+              for (const slot of config.pulseSchedule.slots) {
+                if (slot.mode === oldName) {
+                  slot.mode = name;
+                }
+              }
+            }
+            delete config.pulseSchedule.modes[oldName];
+          }
+
+          // Update mode with merged values
+          config.pulseSchedule.modes[targetName] = {
+            hours: currentMode.hours,
+            interval: interval || currentMode.interval,
+            priorityLevel: (priorityLevel || currentMode.priorityLevel) as 'full' | 'reduced' | 'minimal',
+            description: description !== undefined ? description : currentMode.description,
+          };
+
+          saveConfig(config);
+          broadcast({ event: 'config.update', data: { key: 'pulseSchedule', value: config.pulseSchedule } });
+          return { id, result: { name: targetName } };
+        }
+
+        case 'pulseSchedule.modes.delete': {
+          const { name } = params as { name?: string };
+
+          if (!name) {
+            return { id, error: 'name is required' };
+          }
+          if (!config.pulseSchedule?.modes?.[name]) {
+            return { id, error: `mode "${name}" not found` };
+          }
+
+          // Check if mode is used in any slot
+          if (config.pulseSchedule.slots) {
+            const usedInSlots = config.pulseSchedule.slots.some(s => s.mode === name);
+            if (usedInSlots) {
+              return { id, error: `mode "${name}" is assigned to time slots, remove those first` };
+            }
+          }
+
+          delete config.pulseSchedule.modes[name];
+          saveConfig(config);
+          broadcast({ event: 'config.update', data: { key: 'pulseSchedule.modes', value: config.pulseSchedule.modes } });
+          return { id, result: { deleted: name } };
+        }
+
         case 'fs.list': {
           const dirPath = params?.path as string;
           if (!dirPath) return { id, error: 'path required' };

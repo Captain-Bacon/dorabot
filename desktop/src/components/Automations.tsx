@@ -82,6 +82,7 @@ export function Automations({ gateway }: AutomationsProps) {
   const [pulseRunning, setPulseRunning] = useState(false);
   const [pulseRunStartedAt, setPulseRunStartedAt] = useState<number | null>(null);
   const [showPulseSchedule, setShowPulseSchedule] = useState(false);
+  const [showPulseModes, setShowPulseModes] = useState(false);
   const [currentMode, setCurrentMode] = useState<'working' | 'offpeak' | 'overnight'>('working');
   const [newItem, setNewItem] = useState({
     summary: '',
@@ -364,20 +365,38 @@ export function Automations({ gateway }: AutomationsProps) {
                       {pulse.lastRunAt && <span>last: {formatRelativeTime(pulse.lastRunAt)}</span>}
                       {pulse.nextRunAt && <span>next: {formatTime(pulse.nextRunAt)}</span>}
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 text-[10px] px-2 gap-1"
-                      onClick={() => setShowPulseSchedule(!showPulseSchedule)}
-                    >
-                      <Timer className="w-3 h-3" />
-                      {showPulseSchedule ? 'hide' : 'schedule'}
-                      <Badge className={`text-[8px] h-3.5 px-1 border-0 ${MODE_LABELS[currentMode].color}`}>
-                        {MODE_LABELS[currentMode].label}
-                      </Badge>
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-[10px] px-2 gap-1"
+                        onClick={() => {
+                          setShowPulseModes(!showPulseModes);
+                          if (!showPulseModes) setShowPulseSchedule(false);
+                        }}
+                      >
+                        <Activity className="w-3 h-3" />
+                        {showPulseModes ? 'hide' : 'modes'}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-[10px] px-2 gap-1"
+                        onClick={() => {
+                          setShowPulseSchedule(!showPulseSchedule);
+                          if (!showPulseSchedule) setShowPulseModes(false);
+                        }}
+                      >
+                        <Timer className="w-3 h-3" />
+                        {showPulseSchedule ? 'hide' : 'schedule'}
+                        <Badge className={`text-[8px] h-3.5 px-1 border-0 ${MODE_LABELS[currentMode].color}`}>
+                          {MODE_LABELS[currentMode].label}
+                        </Badge>
+                      </Button>
+                    </div>
                   </div>
 
+                  {showPulseModes && <PulseModeSettings gateway={gateway} />}
                   {showPulseSchedule && <PulseScheduleSettings gateway={gateway} currentMode={currentMode} />}
 
                   {!hasConnectedChannel && (
@@ -712,6 +731,223 @@ function PulseScheduleSettings({ gateway, currentMode }: { gateway: ReturnType<t
           </Select>
         </div>
       </div>
+    </div>
+  );
+}
+
+function PulseModeSettings({ gateway }: { gateway: ReturnType<typeof useGateway> }) {
+  const [modes, setModes] = useState<Record<string, { interval?: string; priorityLevel?: string; description?: string; hours?: { start: number; end: number } }>>({});
+  const [editingMode, setEditingMode] = useState<string | null>(null);
+  const [creatingMode, setCreatingMode] = useState(false);
+  const [formData, setFormData] = useState({ name: '', interval: '30m', priorityLevel: 'full', description: '' });
+
+  const loadModes = useCallback(async () => {
+    if (gateway.connectionState !== 'connected') return;
+    try {
+      const result = await gateway.rpc('pulseSchedule.modes.list') as Record<string, any>;
+      setModes(result);
+    } catch (err) {
+      console.error('failed to load modes:', err);
+    }
+  }, [gateway.connectionState, gateway.rpc]);
+
+  useEffect(() => {
+    loadModes();
+  }, [loadModes]);
+
+  const resetForm = () => {
+    setFormData({ name: '', interval: '30m', priorityLevel: 'full', description: '' });
+    setEditingMode(null);
+    setCreatingMode(false);
+  };
+
+  const createMode = async () => {
+    try {
+      await gateway.rpc('pulseSchedule.modes.add', formData);
+      await loadModes();
+      resetForm();
+    } catch (err) {
+      alert((err as Error).message || 'Failed to create mode');
+    }
+  };
+
+  const updateMode = async (oldName: string) => {
+    try {
+      await gateway.rpc('pulseSchedule.modes.update', { oldName, ...formData });
+      await loadModes();
+      resetForm();
+    } catch (err) {
+      alert((err as Error).message || 'Failed to update mode');
+    }
+  };
+
+  const deleteMode = async (name: string) => {
+    if (!confirm(`Delete mode "${name}"?`)) return;
+    try {
+      await gateway.rpc('pulseSchedule.modes.delete', { name });
+      await loadModes();
+    } catch (err) {
+      alert((err as Error).message || 'Failed to delete mode');
+    }
+  };
+
+  const startEdit = (name: string) => {
+    const mode = modes[name];
+    setFormData({
+      name,
+      interval: mode.interval || '30m',
+      priorityLevel: mode.priorityLevel || 'full',
+      description: mode.description || '',
+    });
+    setEditingMode(name);
+    setCreatingMode(false);
+  };
+
+  const startCreate = () => {
+    setFormData({ name: '', interval: '30m', priorityLevel: 'full', description: '' });
+    setCreatingMode(true);
+    setEditingMode(null);
+  };
+
+  const getModeIcon = (priorityLevel: string) => {
+    if (priorityLevel === 'full') return '🟢';
+    if (priorityLevel === 'reduced') return '🟡';
+    return '🔵';
+  };
+
+  const canSubmit = creatingMode ? formData.name && formData.interval && formData.priorityLevel : formData.interval && formData.priorityLevel;
+
+  return (
+    <div className="space-y-3 pt-2 border-t border-border">
+      <div className="text-[10px] text-muted-foreground bg-muted/30 rounded px-2 py-1.5">
+        Manage pulse modes. Assign different intervals and priority levels for different contexts.
+      </div>
+
+      {(creatingMode || editingMode) && (
+        <Card className="border-primary/50">
+          <CardContent className="p-3 space-y-2">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-semibold">{creatingMode ? 'Create mode' : `Edit: ${editingMode}`}</span>
+              <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={resetForm}>
+                <X className="w-3 h-3" />
+              </Button>
+            </div>
+
+            {creatingMode && (
+              <div className="space-y-1">
+                <Label className="text-[10px]">name</Label>
+                <Input
+                  value={formData.name}
+                  onChange={e => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="weekend-research"
+                  className="h-7 text-xs"
+                />
+                <span className="text-[9px] text-muted-foreground">alphanumeric + hyphens, max 20 chars</span>
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <Label className="text-[10px]">interval</Label>
+              <Select value={formData.interval} onValueChange={v => setFormData({ ...formData, interval: v })}>
+                <SelectTrigger className="h-7 text-[11px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PULSE_INTERVALS.map(iv => (
+                    <SelectItem key={iv} value={iv} className="text-[11px]">{iv}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-[10px]">priority level</Label>
+              <Select value={formData.priorityLevel} onValueChange={v => setFormData({ ...formData, priorityLevel: v })}>
+                <SelectTrigger className="h-7 text-[11px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="full" className="text-[11px]">🟢 full</SelectItem>
+                  <SelectItem value="reduced" className="text-[11px]">🟡 reduced</SelectItem>
+                  <SelectItem value="minimal" className="text-[11px]">🔵 minimal</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-[10px]">description (optional)</Label>
+              <Input
+                value={formData.description}
+                onChange={e => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Focus time"
+                className="h-7 text-xs"
+                maxLength={100}
+              />
+            </div>
+
+            <div className="flex gap-1.5 pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-6 text-[11px] px-2 flex-1"
+                onClick={resetForm}
+              >
+                cancel
+              </Button>
+              <Button
+                size="sm"
+                className="h-6 text-[11px] px-2 flex-1"
+                onClick={() => creatingMode ? createMode() : updateMode(editingMode!)}
+                disabled={!canSubmit}
+              >
+                {creatingMode ? 'create' : 'save'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="space-y-1.5">
+        {Object.entries(modes).map(([name, mode]) => (
+          <div key={name} className="flex items-center gap-2 p-2 rounded border border-border bg-card hover:border-primary/30 transition-colors">
+            <span className="text-sm">{getModeIcon(mode.priorityLevel || 'full')}</span>
+            <div className="flex-1 min-w-0">
+              <div className="text-[11px] font-semibold truncate">{name}</div>
+              <div className="text-[10px] text-muted-foreground">
+                {mode.interval} • {mode.priorityLevel || 'full'}{mode.description ? ` • ${mode.description}` : ''}
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 text-[10px] px-2"
+              onClick={() => startEdit(name)}
+            >
+              edit
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 text-[10px] px-2 text-destructive hover:text-destructive"
+              onClick={() => deleteMode(name)}
+            >
+              delete
+            </Button>
+          </div>
+        ))}
+      </div>
+
+      {!creatingMode && !editingMode && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full h-7 text-[11px]"
+          onClick={startCreate}
+        >
+          <Plus className="w-3 h-3 mr-1" />
+          create mode
+        </Button>
+      )}
     </div>
   );
 }
