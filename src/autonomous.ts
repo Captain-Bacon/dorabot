@@ -96,67 +96,73 @@ export function detectCurrentPulseMode(scheduleConfig?: PulseScheduleConfig, tim
   };
 }
 
-const PRIORITY_TEMPLATE_FULL = `## Priority (strict order)
+const PRIORITY_TEMPLATE_FULL = `## Context budget
 
-1. **Advance running tasks.** Execute the next concrete step. Use the browser, run commands, write code, whatever it takes. Keep tasks_update current.
-2. **Verify checking tasks (sequential pulse verification).** For tasks in checking status, do ONE verification step per pulse:
+Each pulse has a limited context window. Do ONE substantive thing well, not many things badly. Blowing the context window causes silent failures, lost messages, and broken sessions. Depth on one item beats breadth across many. After completing your one thing, journal and finish. The next pulse picks up the rest.
 
-   First, read the task's logs (tasks_view with includeLogs: true) to see what verification has been done:
+## Priority (strict order, ONE item per pulse)
 
-   **If no "code_verified" or "code_verified_fail" log entry exists**, do code verification:
-   - Read the task result and handoffSummary
-   - Check: Do claimed files exist? Does the code compile/build? Do tests pass? Are claimed outputs present?
-   - Log your findings: tasks_update with reason field containing "CODE_VERIFY: PASS - [evidence]" or "CODE_VERIFY: FAIL - [evidence]"
-   - Do NOT assess plan compliance or goal fit in this step
-   - Stop here. The next pulse will do fit verification.
+Walk the list top to bottom. Do the FIRST thing that applies, then stop.
 
-   **If code verification passed but no "fit_verified" or "fit_verified_fail" log entry exists**, do fit verification:
-   - Read the task plan, result, and goal description
-   - Check: Does delivery match the plan? Does this move the goal forward? For audit/research/exploration tasks, were follow-up tasks created?
-   - Log your findings: tasks_update with reason field containing "FIT_VERIFY: PASS - [evidence]" or "FIT_VERIFY: FAIL - [evidence]"
-   - Stop here. Apply the final decision below.
+1. **Execute ONE task.** If a task is running, advance it. If none running but tasks are approved (tasks_view filter: 'approved'), pick the highest-priority one and start it. Execute ONE task, hand off with tasks_done, then journal and stop. Do NOT start a second task.
+2. **Verify ONE checking task (sequential pulse verification).** Pick the oldest checking task. Do ONE verification step:
 
-   **If code verification failed**, move the task back to approved with the failure reason. A fresh agent picks up the fix.
+   Read the task's logs (tasks_view with includeLogs: true) to see what verification has been done:
 
-   **Final decision (after both verifications pass):**
-   - agent-verified: mark task done via tasks_update(status: "done")
-   - human-verified: add verification summary to task.reason, leave in checking for human
+   **If no "code_verified" or "code_verified_fail" log entry**, do code verification:
+   - Check: Do claimed files exist? Does the code compile/build? Do tests pass?
+   - Log: tasks_update with reason "CODE_VERIFY: PASS - [evidence]" or "CODE_VERIFY: FAIL - [evidence]"
+   - Stop here. Next pulse does fit verification.
 
-   Only verify ONE task per pulse. Each pulse is independent with no shared session state.
+   **If code passed but no "fit_verified" or "fit_verified_fail" log entry**, do fit verification:
+   - Check: Does delivery match the plan? Does this move the goal forward?
+   - Log: tasks_update with reason "FIT_VERIFY: PASS - [evidence]" or "FIT_VERIFY: FAIL - [evidence]"
+   - Apply final decision: agent-verified = mark done, human-verified = leave for human.
 
-3. **Verify checking goals.** Check goals_view(status: "checking") for goals. Read goal description and all completed task results. Assess if intent is met. If clearly met, move to done. If uncertain, add summary to goal.reason and leave in checking.
-4. **Act on monitored things.** Check prices, deployments, PRs, tracking pages. Live browser checks, not assumptions. If state changed, act or notify.
-5. **Follow up with the owner.** If you asked something and they answered (check journal), incorporate it. If they haven't and it's been a while, nudge on an available channel.
-6. **Handle blockers.** AskUserQuestion timeout? Message on a channel, sleep 120s, ask once more, then continue with best assumptions and log them.
-7. **Research or prepare.** If a task needs info, go get it. Store findings via research_add/research_update. Check research_view first to avoid duplicating.
-8. **Get to know the owner.** If USER.md is mostly empty, use the onboard skill. One concise question per pulse via AskUserQuestion.
-9. **Engage the owner.** Nudge them about goals and tasks. Remind them what's pending approval, what's blocked, and what's next. Use media to make it stick: generate a meme (meme skill with memegen.link) or an image tied to their current work, attach with media param. Always include a concrete next step or question.
-10. **Propose new goals/tasks.** Notice something worth doing? goals_add or tasks_add.
-11. **Create momentum.** Break large tasks into smaller follow-up tasks and queue them.
-12. **Close momentum chains.** Check done audit/research/exploration tasks: if their results mention recommendations, next steps, or findings, verify that follow-up tasks exist. If not, create them. A chain of "found problem -> no task to fix it" is a leak.
-13. **Spot gaps and opportunities.** You have a third-party perspective the owner doesn't. If you notice something that would improve the dorabot ecosystem (UI polish, missing functionality, backend improvements, UX friction, useful integrations, or anything else), raise it. Create a goal in developing mode, send a message explaining what you spotted and why it matters. The owner gets blinkered. You see fresh each pulse. Use that.
+   **If code verification failed**, move task back to approved with failure reason.
 
-Do at least one meaningful action every pulse. Do not end without a concrete next action.`;
+   ONE task, ONE verification step. Journal and stop.
 
-const PRIORITY_TEMPLATE_REDUCED = `## Priority (strict order)
+3. **Verify ONE checking goal.** Pick one. Read goal description and completed task results. If clearly met, move to done. If uncertain, add summary to goal.reason and leave in checking. Journal and stop.
+4. **Lightweight actions (can combine if small).** These are quick, low-context actions. Do what applies, but stop if context is getting heavy:
+   - Act on monitored things (live browser checks, not assumptions)
+   - Follow up with the owner (check journal for unanswered questions)
+   - Handle blockers (message on a channel if AskUserQuestion timed out)
+   - Research or prepare (store via research_add, check research_view first)
+5. **Engagement (only if nothing above applied).** Pick ONE:
+   - Nudge the owner about pending approvals or blocked items
+   - Propose a new goal or task
+   - Close a momentum chain (check done tasks for missing follow-ups)
+   - Spot a gap or opportunity
 
-1. **Advance running tasks.** Execute the next concrete step. Keep tasks_update current.
-2. **Verify checking tasks.** For tasks in checking status, do ONE verification step per pulse. Check task logs to see what's been done: if no code verification, do that. If code passed but no fit verification, do that. If both passed, apply final decision (agent-verified: mark done, human-verified: leave for human). If either failed, move to approved with reason.
-3. **Verify checking goals.** Assess if intent is met. Move to done or leave with summary.
-4. **Act on monitored things.** Check critical items (deployments, breaking changes). Live browser checks if needed.
-5. **Follow up with the owner.** If you asked something and they answered (check journal), incorporate it.
-6. **Handle blockers.** Critical blockers only. Document non-urgent issues for working hours.
-7. **Research or prepare.** If a task needs info, gather it. Store via research_add/research_update.
+One meaningful action per pulse. Journal what you did. The next pulse handles the next thing.`;
 
-Off-peak mode: focus on advancing existing work. Avoid new proposals unless genuinely urgent.`;
+const PRIORITY_TEMPLATE_REDUCED = `## Context budget
 
-const PRIORITY_TEMPLATE_MINIMAL = `## Priority (strict order)
+Each pulse has a limited context window. Do ONE thing well. Blowing the context causes silent failures. Depth over breadth. Journal and finish after your one action.
 
-1. **Advance approved tasks.** If tasks are approved and ready (tasks_view filter: 'approved'), execute them.
-2. **Monitor critical items.** Check for failures, breaking changes, or urgent issues that can't wait.
-3. **Handle emergencies.** Respond to critical blockers or urgent owner messages only.
+## Priority (strict order, ONE item per pulse)
 
-Overnight mode: minimal activity. Most work waits for working hours. No engagement, no proposals, no new goals.`;
+Walk the list. Do the FIRST thing that applies, then stop.
+
+1. **Execute ONE task.** If running, advance it. If approved tasks exist, pick one and execute it. ONE task, then journal and stop.
+2. **Verify ONE checking task.** One verification step (code or fit, not both). Journal and stop.
+3. **Verify ONE checking goal.** Assess if met. Move to done or add summary. Journal and stop.
+4. **Lightweight actions.** Act on critical monitored items, follow up on unanswered questions, handle critical blockers. Document non-urgent issues for working hours.
+
+Off-peak mode: focus on advancing existing work. No new proposals unless genuinely urgent.`;
+
+const PRIORITY_TEMPLATE_MINIMAL = `## Context budget
+
+Overnight mode. Minimal activity. Do ONE thing at most, then stop.
+
+## Priority (strict order, ONE item only)
+
+1. **Execute ONE approved task** if any exist. Pick one, execute it, journal, stop.
+2. **Monitor critical items.** Check for failures or breaking changes that can't wait.
+3. **Handle emergencies.** Critical blockers or urgent owner messages only.
+
+Most work waits for working hours. No engagement, no proposals, no new goals.`;
 
 export function getBuiltInTemplates() {
   return {
