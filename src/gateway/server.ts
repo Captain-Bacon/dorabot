@@ -1386,6 +1386,8 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
         const old = sessionRegistry.get(key);
         if (old) fileSessionManager.setMetadata(old.sessionId, { sdkSessionId: undefined });
         sessionRegistry.remove(key);
+        contextUsageMap.delete(key);
+        contextWarningMap.delete(key);
         return `session reset. ${old ? `old: ${old.messageCount} messages.` : ''} new session started.`;
       }
 
@@ -1398,6 +1400,8 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
           fileSessionManager.setMetadata(session.sessionId, { sdkSessionId: undefined });
         }
         sessionRegistry.remove(key);
+        contextUsageMap.delete(key);
+        contextWarningMap.delete(key);
         return '✓ Conversation cleared. Starting fresh.';
       }
 
@@ -2887,6 +2891,15 @@ export async function startGateway(opts: GatewayOptions): Promise<Gateway> {
         broadcast(errorEvent);
         if (streamV2Enabled && typeof errorEvent.seq === 'number') {
           scheduleRunEventPrune(sessionKey, errorEvent.seq);
+        }
+        // Send error to messaging channel (Telegram/WhatsApp) so user isn't left in silence
+        const errCtx = channelRunContexts.get(sessionKey);
+        if (errCtx?.chatId) {
+          const errHandler = getChannelHandler(errCtx.channel);
+          if (errHandler) {
+            const shortErr = errMsg.length > 300 ? errMsg.slice(0, 300) + '...' : errMsg;
+            try { await errHandler.send(errCtx.chatId, `⚠️ Error: ${shortErr}\n\nUse /clear to start fresh.`); } catch {}
+          }
         }
       } finally {
         activeAbortControllers.delete(sessionKey);
