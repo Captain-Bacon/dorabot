@@ -13,13 +13,14 @@ A complete guide to understanding and using dorabot: what it does, when it does 
 5. [Scheduling and Calendar](#scheduling-and-calendar)
 6. [Channels (Desktop, Telegram, WhatsApp)](#channels)
 7. [Research System](#research-system)
-8. [Browser Automation](#browser-automation)
-9. [Skills](#skills)
-10. [Agents and Sub-Agents](#agents-and-sub-agents)
-11. [Permissions and Security](#permissions-and-security)
-12. [Configuration Reference](#configuration-reference)
-13. [File Paths Reference](#file-paths-reference)
-14. [Commands Reference](#commands-reference)
+8. [Library System](#library-system)
+9. [Browser Automation](#browser-automation)
+10. [Skills](#skills)
+11. [Agents and Sub-Agents](#agents-and-sub-agents)
+12. [Permissions and Security](#permissions-and-security)
+13. [Configuration Reference](#configuration-reference)
+14. [File Paths Reference](#file-paths-reference)
+15. [Commands Reference](#commands-reference)
 
 ---
 
@@ -60,11 +61,11 @@ You might think agents only run when you open the chat. Here's the full list:
 |---------|------|--------------|
 | **You type in desktop** | When you send a message | Agent runs, responds in chat |
 | **Telegram/WhatsApp message** | When someone messages the bot | Agent runs, responds in channel |
-| **The Pulse** | Every 30 minutes (configurable) | Agent wakes up, checks goals/tasks, advances work, may message you |
+| **The Pulse** | On a schedule (default: 30m working, 2h off-peak, 6h overnight) | Agent wakes up, checks goals/tasks, advances work, may message you |
 | **Scheduled tasks** | At the time you set | Agent runs with the task's message as its prompt |
 | **Reminders** | At the time you set | Agent runs, then auto-deletes the reminder |
 
-The pulse is the big one. If you're in autonomous mode, there's an agent running every 30 minutes that can create goals, update tasks, do research, browse the web, and message you. It's not a cron job that checks a flag. It's a full LLM agent run.
+The pulse is the big one. If you're in autonomous mode, there's an agent running on a schedule (every 30 minutes during working hours, less frequently at other times) that can create goals, update tasks, do research, browse the web, and message you. It's not a cron job that checks a flag. It's a full LLM agent run.
 
 ### What survives between sessions
 
@@ -119,17 +120,32 @@ After acting, it may message you on Telegram/WhatsApp if something important hap
 
 ### Configuration
 
+The pulse operates in three modes, each with its own interval and priority level. The active mode is determined by the current time and your configured schedule slots.
+
+| Mode | Default Hours | Default Interval | Priority | Description |
+|------|---------------|------------------|----------|-------------|
+| **working** | 9:00 - 18:00 | 30m | full | Execute tasks, verify work, propose ideas, message you |
+| **off-peak** | 18:00 - 23:00 | 2h | reduced | Advance approved tasks, verification only, no new proposals |
+| **overnight** | 23:00 - 9:00 | 6h | minimal | Light maintenance, no messaging, no proposals |
+
+Each mode can be customized with:
+- **Interval**: How often the pulse fires (`15m`, `30m`, `1h`, `2h`, `4h`, `6h`)
+- **Priority level**: What the pulse is allowed to do (`full`, `reduced`, `minimal`)
+- **Custom prompt**: Additional instructions for that mode
+- **Schedule slots**: Which hours each mode covers (timezone-aware, DST handled)
+
 | Setting | Options | Default |
 |---------|---------|---------|
 | Autonomy mode | `supervised`, `autonomous` | `supervised` |
-| Pulse interval | `15m`, `30m`, `1h`, `2h` | `30m` |
 
 In **supervised** mode, the pulse still runs but asks permission before external actions.
 In **autonomous** mode, it acts freely (except for truly destructive operations).
 
+**One task per pulse**: Each pulse run executes at most one task, one verification step, or one goal check. This prevents context window blowouts and keeps each run focused.
+
 ### Controlling the pulse
 
-- **Desktop**: Settings > Autonomy section, or Automations tab
+- **Desktop**: Settings > Autonomy section (mode toggle), Automations tab (schedule slots, intervals, custom prompts)
 - **Config**: Set `autonomy` to `supervised` or `autonomous` in `~/.dorabot/config.json`
 - **Disable entirely**: Set autonomy to `supervised` and disable the pulse schedule in the Automations tab
 
@@ -199,29 +215,33 @@ The goals/tasks system is a structured pipeline for getting work done. The agent
 
 ```
 1. Agent creates a goal (or you ask for one)
-2. Agent creates tasks under that goal
+2. Agent creates tasks under that goal (status: draft)
 3. Agent writes a plan for each task
-4. Task moves to "planned" status
+4. Agent sets task to "reviewed" (appears in Needs Approval)
 5. You review and approve (or deny) in the Goals tab
-6. Agent starts the approved task
-7. Agent works, updates progress
-8. Agent marks task done with results
+6. Agent picks up the approved task, sets to "running"
+7. Agent works, then hands off with tasks_done (status: checking)
+8. Verification runs (agent or human), then task moves to done
 ```
 
-### Goal statuses
+### Goal statuses (modes of attention)
 
-- **active**: Currently being worked toward
-- **paused**: Deprioritized, not forgotten
-- **done**: Completed
+- **holding**: You're still thinking about this. Agent hands off entirely.
+- **developing**: Idea needs fleshing out. Agent can research, suggest, propose tasks, but does not execute.
+- **active**: Has approved tasks, ready for execution. Normal workflow.
+- **checking**: Work is done, needs verification against original intent. A different agent reviews.
+- **done**: Completed and verified.
 
 ### Task statuses
 
-- **planning**: Agent is still thinking through the approach
-- **planned**: Plan written, waiting for your approval
-- **in_progress**: Approved and actively being worked on
+- **draft**: Agent is still writing the plan
+- **reviewed**: Plan written and reviewed, waiting for your approval
+- **approved**: You approved the plan, agent can start work
+- **running**: Actively being worked on
+- **checking**: Work complete, being verified (see [Task Verification Pipeline](#task-verification-pipeline))
 - **done**: Completed with results
-- **blocked**: Stuck on something
-- **cancelled**: Abandoned
+- **blocked**: Stuck on something (orthogonal, can happen at any stage)
+- **cancelled**: Abandoned (orthogonal)
 
 ### Approval flow
 
@@ -232,6 +252,20 @@ This is important: **the agent cannot start work on a task without your approval
 3. You read the plan and click Approve or Deny
 4. If approved, the agent can start it (it will ask first or you can start it from the Goals tab)
 5. If denied, the agent revises the plan or drops the task
+
+### Task verification pipeline
+
+When an agent finishes a task, it doesn't mark it "done" directly. Instead, it hands off the work for verification:
+
+1. **Agent A (executor)** completes the work and calls `tasks_done` with a result summary and handoff notes. Status moves to `checking`.
+2. **Pulse 1 (code verification)**: The next pulse run checks the work functionally: do files exist? Does the build pass? Are there errors? Logs `CODE_VERIFY: PASS/FAIL`.
+3. **Pulse 2 (fit verification)**: The following pulse checks plan compliance and goal alignment. Does the delivery match the plan? Does it advance the goal? Logs `FIT_VERIFY: PASS/FAIL`.
+4. **If both pass**: The task's `verificationType` determines what happens next:
+   - `agent-verified`: Pulse marks the task done automatically. Use for objectively testable work (config, backend, tests).
+   - `human-verified`: Pulse adds a verification summary and waits for you to confirm. Use for UI, qualitative work, architectural decisions.
+5. **If either fails**: Task moves back to `approved` with a failure reason. A fresh agent picks it up.
+
+Each verification step runs in a separate pulse session. No shared context between executor and verifiers.
 
 ### Who creates goals and tasks?
 
@@ -409,6 +443,55 @@ Content here...
 
 ---
 
+## Library System
+
+Libraries let you index collections of documents (markdown, text, PDF) so the agent can search them with keyword matching (BM25). Think of it as a personal knowledge base the agent can reference.
+
+### How it works
+
+A library points at a directory of files. When you add a library, dorabot indexes every matching file. The agent can then search across all libraries (or specific ones) to find relevant passages.
+
+### Managing libraries
+
+- **Desktop**: Libraries tab (add, browse, search, reindex)
+- **Chat**: "Search my libraries for X" or use library tools directly
+
+### Library tools
+
+| Tool | What it does |
+|------|-------------|
+| `library_add` | Register a new library (name, path, domains, file types) |
+| `library_list` | List all libraries with metadata |
+| `library_remove` | Remove a library and its index |
+| `library_search` | Search across libraries using BM25 keyword search |
+| `library_reindex` | Force re-index after manual file changes |
+
+### Library properties
+
+| Property | Description |
+|----------|-------------|
+| **name** | Display name for the library |
+| **path** | Directory containing the documents |
+| **domains** | Subject tags (e.g. `["music", "production"]`) |
+| **fileTypes** | Extensions to index (default: `.md`, `.txt`, `.pdf`) |
+| **trustLevel** | `authoritative`, `experimental`, or `external` |
+| **updateFrequency** | `live`, `daily`, or `static` |
+
+### Example
+
+```json
+{
+  "name": "Worship Music Notes",
+  "path": "/Users/me/Documents/worship",
+  "domains": ["music", "worship"],
+  "fileTypes": [".md", ".txt"],
+  "trustLevel": "authoritative",
+  "updateFrequency": "static"
+}
+```
+
+---
+
 ## Browser Automation
 
 Dorabot can control a real Chrome browser with your existing login sessions.
@@ -504,6 +587,8 @@ When the agent needs to do parallel or specialized work, it spawns sub-agents.
 | refactor | Code refactoring | sonnet |
 | debugger | Issue debugging | sonnet |
 | planner | Implementation planning | sonnet |
+| librarian | Semantic search across user libraries | haiku |
+| strategic-partner | Deep reasoning, planning, problem-solving | opus |
 
 ### Custom agents
 
@@ -536,15 +621,30 @@ Built-in agents can be disabled but not deleted. Custom agents can be both.
 
 ## Permissions and Security
 
-### Approval modes
+### Permission modes
 
-Set via `config.security.approvalMode`:
+Two settings control what requires approval:
+
+**`config.permissionMode`** (Claude Code SDK level):
+
+| Mode | Behavior |
+|------|----------|
+| `default` | Normal permission checking |
+| `acceptEdits` | Auto-approve file edits, ask for other sensitive ops |
+| `bypassPermissions` | Skip all permission checks |
+| `plan` | Plan mode (read-only, no writes) |
+| `dontAsk` | Don't ask, deny if not auto-allowed |
+| `delegate` | Delegate permission decisions |
+
+**`config.security.approvalMode`** (dorabot layer):
 
 | Mode | Behavior |
 |------|----------|
 | `approve-sensitive` (default) | Ask before destructive operations |
 | `autonomous` | Auto-approve all tools |
 | `lockdown` | Ask before almost everything |
+
+These work together: `permissionMode` controls SDK-level permissions, `approvalMode` controls dorabot's own approval layer on top. Setting autonomy to `autonomous` in the UI syncs both: `approvalMode` to `autonomous` and `permissionMode` to `bypassPermissions`.
 
 ### What requires approval (in approve-sensitive mode)
 
@@ -579,7 +679,7 @@ Each channel can have its own tool allow/deny lists and path restrictions. See [
 
 ### Approval timeout
 
-When the agent requests approval (in any channel), you have 5 minutes to respond. After that, the request is auto-denied.
+When the agent requests approval (in any channel), you have 10 minutes to respond (configurable via `questionTimeoutMs` in config). After that, the request is auto-denied.
 
 ---
 
@@ -614,6 +714,7 @@ All configuration lives in `~/.dorabot/config.json`.
 | `security.approvalMode` | `approve-sensitive` \| `autonomous` \| `lockdown` | Tool approval mode |
 | `security.tools.allow` | string[] | Globally allowed tools |
 | `security.tools.deny` | string[] | Globally denied tools |
+| `questionTimeoutMs` | number (default: 600000) | Approval/question timeout in ms (10 minutes) |
 
 ### Sandbox settings
 
@@ -751,4 +852,4 @@ These aren't commands with specific syntax. Just talk naturally:
 
 ---
 
-*This manual covers dorabot as of February 2026. The codebase evolves, so some details may drift. When in doubt, check the source or ask the agent.*
+*This manual covers dorabot as of March 2026. The codebase evolves, so some details may drift. When in doubt, check the source or ask the agent.*
